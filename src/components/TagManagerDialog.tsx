@@ -24,6 +24,9 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { addCategory, addTag, removeCategory, removeTag, updateTag } from '../store/dataSlice';
 import { setTagManagerOpen } from '../store/uiSlice';
 import { mediaUrl } from '../services/format';
+import { CropImageDialog } from './CropImageDialog';
+
+const TAG_COVER_RATIO = 16 / 10;
 
 const useStyles = makeStyles({
   root: {
@@ -86,6 +89,7 @@ export function TagManagerDialog() {
 
   const [newCategory, setNewCategory] = useState('');
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
+  const [cropTarget, setCropTarget] = useState<{ tagId: string; imagePath: string } | null>(null);
 
   if (!open) return null;
 
@@ -104,16 +108,17 @@ export function TagManagerDialog() {
 
   const handleSetCover = async (tagId: string) => {
     const p = await window.electronAPI.pickImage();
-    if (p) dispatch(updateTag({ id: tagId, patch: { coverPath: p } }));
+    if (p) setCropTarget({ tagId, imagePath: p });
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(_, data) => {
-        if (!data.open) dispatch(setTagManagerOpen(false));
-      }}
-    >
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(_, data) => {
+          if (!data.open) dispatch(setTagManagerOpen(false));
+        }}
+      >
       <DialogSurface>
         <DialogBody>
           <DialogTitle>标签管理</DialogTitle>
@@ -210,5 +215,18 @@ export function TagManagerDialog() {
         </DialogBody>
       </DialogSurface>
     </Dialog>
+    {cropTarget && (
+        <CropImageDialog
+          open
+          imagePath={cropTarget.imagePath}
+          aspectRatio={TAG_COVER_RATIO}
+          onClose={() => setCropTarget(null)}
+          onSaved={(filePath) => {
+            dispatch(updateTag({ id: cropTarget.tagId, patch: { coverPath: filePath } }));
+            setCropTarget(null);
+          }}
+        />
+      )}
+    </>
   );
 }

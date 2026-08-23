@@ -34,8 +34,21 @@ interface MediaItem {
   restricted: boolean;
 }
 
+interface Series {
+  id: string;
+  libraryId: string;
+  title: string;
+  tags: string[];
+  coverPath?: string;
+  description: string;
+  createdAt: number;
+  restricted: boolean;
+  memberIds: string[];
+}
+
 interface AppSettings {
   playerPath: string;
+  showFileExt: boolean;
 }
 
 interface AppData {
@@ -43,7 +56,13 @@ interface AppData {
   categories: string[];
   tags: Tag[];
   media: MediaItem[];
+  series: Series[];
   settings: AppSettings;
+}
+
+interface LibraryFile {
+  media?: MediaItem[];
+  series?: Series[];
 }
 
 interface GlobalData {
@@ -74,7 +93,7 @@ const DEFAULT_TAG_DATA: TagData = {
 
 const DEFAULT_GLOBAL: GlobalData = {
   libraries: [],
-  settings: { playerPath: '' },
+  settings: { playerPath: '', showFileExt: false },
 };
 
 let mainWindow: BrowserWindow | null = null;
@@ -119,14 +138,15 @@ function loadTags(): TagData {
   }
 }
 
-function loadLibraryFile(libPath: string): MediaItem[] {
+function loadLibraryFile(libPath: string): LibraryFile {
   try {
-    const parsed = JSON.parse(fs.readFileSync(libraryDataFile(libPath), 'utf-8')) as {
-      media?: MediaItem[];
+    const parsed = JSON.parse(fs.readFileSync(libraryDataFile(libPath), 'utf-8')) as LibraryFile;
+    return {
+      media: parsed.media ?? [],
+      series: parsed.series ?? [],
     };
-    return parsed.media ?? [];
   } catch {
-    return [];
+    return { media: [], series: [] };
   }
 }
 
@@ -134,14 +154,18 @@ function loadData(): AppData {
   const global = loadGlobal();
   const tagData = loadTags();
   const media: MediaItem[] = [];
+  const series: Series[] = [];
   for (const lib of global.libraries) {
-    media.push(...loadLibraryFile(lib.path));
+    const libFile = loadLibraryFile(lib.path);
+    media.push(...(libFile.media ?? []));
+    series.push(...(libFile.series ?? []));
   }
   return {
     libraries: global.libraries,
     categories: tagData.categories,
     tags: tagData.tags,
     media,
+    series,
     settings: global.settings,
   };
 }
@@ -166,6 +190,7 @@ function saveData(data: AppData): void {
       fs.mkdirSync(lib.path, { recursive: true });
       const libData = {
         media: data.media.filter((m) => m.libraryId === lib.id),
+        series: data.series.filter((s) => s.libraryId === lib.id),
       };
       fs.writeFileSync(libraryDataFile(lib.path), JSON.stringify(libData, null, 2), 'utf-8');
     } catch {
@@ -444,6 +469,22 @@ function registerIpc(): void {
       fs.mkdirSync(coversDir, { recursive: true });
       const safeBase = (baseName || 'frame').replace(/[\\/:*?"<>|]/g, '_');
       const outPath = path.join(coversDir, `${safeBase}.png`);
+      fs.writeFileSync(outPath, buf);
+      return { ok: true, filePath: outPath };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('file:saveCrop', (_event, dataUrl: string) => {
+    try {
+      const m = /^data:image\/(png|jpeg|jpg);base64,(.+)$/.exec(dataUrl ?? '');
+      if (!m) return { ok: false, error: '无效的图像数据' };
+      const buf = Buffer.from(m[2], 'base64');
+      const ext = m[1] === 'png' ? 'png' : 'jpg';
+      const coversDir = path.join(app.getPath('userData'), 'covers');
+      fs.mkdirSync(coversDir, { recursive: true });
+      const outPath = path.join(coversDir, `crop_${Date.now()}_${Math.round(Math.random() * 1e9)}.${ext}`);
       fs.writeFileSync(outPath, buf);
       return { ok: true, filePath: outPath };
     } catch (err) {

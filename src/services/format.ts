@@ -1,5 +1,11 @@
 export const mediaUrl = (filePath: string): string => 'media://local/' + encodeURIComponent(filePath);
 
+export function displayName(fileName: string, showFileExt: boolean): string {
+  if (showFileExt) return fileName;
+  const dot = fileName.lastIndexOf('.');
+  return dot > 0 ? fileName.slice(0, dot) : fileName;
+}
+
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;

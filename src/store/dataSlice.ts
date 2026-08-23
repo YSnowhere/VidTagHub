@@ -1,5 +1,5 @@
 import { createSlice, nanoid, PayloadAction } from '@reduxjs/toolkit';
-import { AppData, AppSettings, Library, MediaItem, ScanResult, Tag, DEFAULT_DATA } from '../types';
+import { AppData, AppSettings, Library, MediaItem, ScanResult, Series, Tag, DEFAULT_DATA } from '../types';
 
 const initialState: AppData = DEFAULT_DATA;
 
@@ -12,6 +12,13 @@ const dataSlice = createSlice({
       ...action.payload,
       categories: action.payload.categories?.length ? action.payload.categories : DEFAULT_DATA.categories,
       media: action.payload.media.map((m) => ({ ...m, restricted: m.restricted ?? false })),
+      series: (action.payload.series ?? []).map((s) => ({
+        ...s,
+        tags: s.tags ?? [],
+        memberIds: s.memberIds ?? [],
+        restricted: s.restricted ?? false,
+        description: s.description ?? '',
+      })),
       settings: { ...DEFAULT_DATA.settings, ...(action.payload.settings ?? {}) },
     }),
     addLibrary: {
@@ -27,6 +34,7 @@ const dataSlice = createSlice({
       const id = action.payload;
       state.libraries = state.libraries.filter((l) => l.id !== id);
       state.media = state.media.filter((m) => m.libraryId !== id);
+      state.series = state.series.filter((s) => s.libraryId !== id);
     },
     addMediaFromScan: (state, action: PayloadAction<{ libraryId: string; files: ScanResult[] }>) => {
       const { libraryId, files } = action.payload;
@@ -62,7 +70,11 @@ const dataSlice = createSlice({
       if (item) Object.assign(item, action.payload.patch);
     },
     removeMedia: (state, action: PayloadAction<string>) => {
-      state.media = state.media.filter((m) => m.id !== action.payload);
+      const id = action.payload;
+      state.media = state.media.filter((m) => m.id !== id);
+      state.series = state.series
+        .map((s) => ({ ...s, memberIds: s.memberIds.filter((mid) => mid !== id) }))
+        .filter((s) => s.memberIds.length > 0);
     },
     addCategory: (state, action: PayloadAction<string>) => {
       const name = action.payload.trim();
@@ -107,6 +119,51 @@ const dataSlice = createSlice({
       state.media.forEach((m) => {
         m.tags = m.tags.filter((t) => t !== id);
       });
+      state.series.forEach((s) => {
+        s.tags = s.tags.filter((t) => t !== id);
+      });
+    },
+    createSeries: {
+      reducer: (state, action: PayloadAction<Series>) => {
+        state.series.push(action.payload);
+      },
+      prepare: (payload: { libraryId: string; title: string; memberIds: string[] }) => ({
+        payload: {
+          id: nanoid(),
+          libraryId: payload.libraryId,
+          title: payload.title,
+          tags: [],
+          description: '',
+          createdAt: Date.now(),
+          restricted: false,
+          memberIds: payload.memberIds,
+        },
+      }),
+    },
+    updateSeries: (
+      state,
+      action: PayloadAction<{
+        id: string;
+        patch: Partial<Pick<Series, 'title' | 'tags' | 'coverPath' | 'description' | 'restricted'>>;
+      }>
+    ) => {
+      const series = state.series.find((s) => s.id === action.payload.id);
+      if (series) Object.assign(series, action.payload.patch);
+    },
+    addSeriesMembers: (state, action: PayloadAction<{ id: string; memberIds: string[] }>) => {
+      const series = state.series.find((s) => s.id === action.payload.id);
+      if (!series) return;
+      for (const mid of action.payload.memberIds) {
+        if (!series.memberIds.includes(mid)) series.memberIds.push(mid);
+      }
+    },
+    removeSeriesMember: (state, action: PayloadAction<{ id: string; memberId: string }>) => {
+      const series = state.series.find((s) => s.id === action.payload.id);
+      if (!series) return;
+      series.memberIds = series.memberIds.filter((m) => m !== action.payload.memberId);
+    },
+    removeSeries: (state, action: PayloadAction<string>) => {
+      state.series = state.series.filter((s) => s.id !== action.payload);
     },
     updateSettings: (state, action: PayloadAction<Partial<AppSettings>>) => {
       Object.assign(state.settings, action.payload);
@@ -126,6 +183,11 @@ export const {
   addTag,
   updateTag,
   removeTag,
+  createSeries,
+  updateSeries,
+  addSeriesMembers,
+  removeSeriesMember,
+  removeSeries,
   updateSettings,
 } = dataSlice.actions;
 

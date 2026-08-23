@@ -1,8 +1,8 @@
-import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
-import { Play20Regular, PlayCircle24Regular } from '@fluentui/react-icons';
+import { Badge, Button, Checkbox, Text, makeStyles, tokens } from '@fluentui/react-components';
+import { Play20Regular, PlayCircle24Regular, Eye20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { setSelectedMedia } from '../store/uiSlice';
-import { mediaUrl } from '../services/format';
+import { setSelectedMedia, toggleSelectedId } from '../store/uiSlice';
+import { displayName, mediaUrl } from '../services/format';
 import { playMedia } from '../services/play';
 import type { MediaItem } from '../types';
 
@@ -50,15 +50,24 @@ const useStyles = makeStyles({
     display: 'flex',
     gap: '4px',
     opacity: 0,
+    pointerEvents: 'none',
     transition: 'opacity 0.15s ease',
   },
   cardHoverActions: {
     opacity: 1,
+    pointerEvents: 'auto',
   },
   typeBadge: {
     position: 'absolute',
     left: '6px',
     top: '6px',
+  },
+  selectBox: {
+    position: 'absolute',
+    right: '6px',
+    top: '6px',
+    background: tokens.colorNeutralBackground1,
+    borderRadius: tokens.borderRadiusSmall,
   },
   info: {
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
@@ -86,18 +95,45 @@ interface Props {
 export function VideoCard({ item }: Props) {
   const dispatch = useAppDispatch();
   const selectedMediaId = useAppSelector((s) => s.ui.selectedMediaId);
+  const selectionMode = useAppSelector((s) => s.ui.selectionMode);
+  const selectedIds = useAppSelector((s) => s.ui.selectedIds);
+  const showFileExt = useAppSelector((s) => s.data.settings.showFileExt);
   const tags = useAppSelector((s) => s.data.tags);
   const styles = useStyles();
 
   const coverSrc =
-    item.type === 'image' ? mediaUrl(item.filePath) : item.coverPath ? mediaUrl(item.coverPath) : null;
+    item.type === 'image'
+      ? item.coverPath
+        ? mediaUrl(item.coverPath)
+        : mediaUrl(item.filePath)
+      : item.coverPath
+      ? mediaUrl(item.coverPath)
+      : null;
   const itemTags = item.tags.map((id) => tags.find((t) => t.id === id)).filter(Boolean);
   const selected = selectedMediaId === item.id;
+  const isChecked = selectedIds.includes(item.id);
+
+  const handleClick = () => {
+    if (selectionMode) {
+      dispatch(toggleSelectedId(item.id));
+    } else {
+      dispatch(setSelectedMedia(item.id));
+    }
+  };
+
+  const handleQuickAction = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (item.type === 'video') {
+      void playMedia(item);
+    } else {
+      void window.electronAPI.openWithSystem(item.filePath);
+    }
+  };
 
   return (
     <div
-      className={`${styles.card} ${selected ? styles.cardSelected : ''}`}
-      onClick={() => dispatch(setSelectedMedia(item.id))}
+      className={`${styles.card} ${selected || isChecked ? styles.cardSelected : ''}`}
+      onClick={handleClick}
       title={item.fileName}
     >
       <div className={styles.cover}>
@@ -111,23 +147,30 @@ export function VideoCard({ item }: Props) {
         <Badge className={styles.typeBadge} size="small" appearance="filled" color={item.type === 'video' ? 'informative' : 'success'}>
           {item.type === 'video' ? '视频' : '图片'}
         </Badge>
+        {selectionMode && (
+          <div className={styles.selectBox}>
+            <Checkbox
+              checked={isChecked}
+              onChange={() => dispatch(toggleSelectedId(item.id))}
+              onClick={(e) => e.stopPropagation()}
+              aria-label="选择"
+            />
+          </div>
+        )}
         <div className={`${styles.coverActions} ${selected ? styles.cardHoverActions : ''}`}>
           <Button
-            icon={<Play20Regular />}
+            icon={item.type === 'video' ? <Play20Regular /> : <Eye20Regular />}
             size="small"
             appearance="primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              void playMedia(item);
-            }}
+            onClick={handleQuickAction}
           >
-            播放
+            {item.type === 'video' ? '播放' : '查看'}
           </Button>
         </div>
       </div>
       <div className={styles.info}>
         <Text className={styles.name} size={200} title={item.fileName}>
-          {item.fileName}
+          {displayName(item.fileName, showFileExt)}
         </Text>
         <div className={styles.tags}>
           {itemTags.map((t) => (

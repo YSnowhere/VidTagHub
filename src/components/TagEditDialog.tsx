@@ -13,13 +13,15 @@ import {
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { updateMedia } from '../store/dataSlice';
-import type { MediaItem } from '../types';
+import { useAppSelector } from '../store/hooks';
 
 interface Props {
-  item: MediaItem;
   open: boolean;
+  title: string;
+  tags: string[];
+  restricted: boolean;
+  onToggleTag: (tagId: string) => void;
+  onSetRestricted: (value: boolean) => void;
   onClose: () => void;
 }
 
@@ -44,23 +46,18 @@ const useStyles = makeStyles({
   },
 });
 
-export function TagEditDialog({ item, open, onClose }: Props) {
-  const dispatch = useAppDispatch();
+export function TagEditDialog({
+  open,
+  title,
+  tags,
+  restricted,
+  onToggleTag,
+  onSetRestricted,
+  onClose,
+}: Props) {
   const categories = useAppSelector((s) => s.data.categories);
-  const tags = useAppSelector((s) => s.data.tags);
+  const allTags = useAppSelector((s) => s.data.tags);
   const styles = useStyles();
-
-  const toggle = (tagId: string) => {
-    const has = item.tags.includes(tagId);
-    dispatch(
-      updateMedia({
-        id: item.id,
-        patch: {
-          tags: has ? item.tags.filter((t) => t !== tagId) : [...item.tags, tagId],
-        },
-      })
-    );
-  };
 
   return (
     <Dialog
@@ -74,7 +71,7 @@ export function TagEditDialog({ item, open, onClose }: Props) {
           <DialogTitle>修改标签</DialogTitle>
           <DialogContent>
             <Text size={300} weight="semibold">
-              {item.fileName}
+              {title}
             </Text>
 
             <div className={styles.restrictRow}>
@@ -86,17 +83,11 @@ export function TagEditDialog({ item, open, onClose }: Props) {
                   限制标签，不参与分类；开启后默认隐藏，需在侧边栏开启「NSFW 内容」才能显示
                 </Text>
               </div>
-              <Switch
-                checked={item.restricted}
-                onChange={(_, data) =>
-                  dispatch(updateMedia({ id: item.id, patch: { restricted: !!data.checked } }))
-                }
-                label="限制"
-              />
+              <Switch checked={restricted} onChange={(_, data) => onSetRestricted(!!data.checked)} label="限制" />
             </div>
 
             {categories.map((cat) => {
-              const catTags = tags.filter((t) => t.category === cat);
+              const catTags = allTags.filter((t) => t.category === cat);
               if (catTags.length === 0) return null;
               return (
                 <div key={cat} className={styles.catGroup}>
@@ -112,15 +103,15 @@ export function TagEditDialog({ item, open, onClose }: Props) {
                     <Checkbox
                       key={tag.id}
                       label={tag.name}
-                      checked={item.tags.includes(tag.id)}
-                      onChange={() => toggle(tag.id)}
+                      checked={tags.includes(tag.id)}
+                      onChange={() => onToggleTag(tag.id)}
                     />
                   ))}
                 </div>
               );
             })}
 
-            {categories.every((cat) => tags.filter((t) => t.category === cat).length === 0) && (
+            {categories.every((cat) => allTags.filter((t) => t.category === cat).length === 0) && (
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, display: 'block', marginTop: 8 }}>
                 暂无标签，可在右上角「标签管理」中添加
               </Text>

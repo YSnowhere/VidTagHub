@@ -32,6 +32,7 @@ import {
   setView,
 } from '../store/uiSlice';
 import { store } from '../store';
+import { memberIdSet } from '../services/series';
 import type { Library } from '../types';
 
 const useStyles = makeStyles({
@@ -107,6 +108,7 @@ export function Sidebar() {
   const dispatch = useAppDispatch();
   const libraries = useAppSelector((s) => s.data.libraries);
   const media = useAppSelector((s) => s.data.media);
+  const series = useAppSelector((s) => s.data.series);
   const selectedLibraryId = useAppSelector((s) => s.ui.selectedLibraryId);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const view = useAppSelector((s) => s.ui.view);
@@ -117,7 +119,11 @@ export function Sidebar() {
   const [removeTarget, setRemoveTarget] = useState<Library | null>(null);
   const [notice, setNotice] = useState('');
 
-  const countForLibrary = (libId: string) => media.filter((m) => m.libraryId === libId).length;
+  const hiddenMembers = memberIdSet(series);
+
+  const countForLibrary = (libId: string) =>
+    media.filter((m) => m.libraryId === libId && !hiddenMembers.has(m.id)).length +
+    series.filter((s) => s.libraryId === libId).length;
 
   const handleRescan = async (libId: string) => {
     const lib = store.getState().data.libraries.find((l) => l.id === libId);
@@ -182,7 +188,7 @@ export function Sidebar() {
           <Text size={300}>全部</Text>
         </span>
         <Badge className={styles.count} size="small" appearance="tint">
-          {media.length}
+          {media.filter((m) => !hiddenMembers.has(m.id)).length + series.length}
         </Badge>
       </div>
 

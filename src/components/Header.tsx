@@ -29,6 +29,7 @@ import {
   setSettingsOpen,
   setSearchField,
   setSearchMode,
+  setSearchSubEpisodes,
   setSelectedLibrary,
   setView,
 } from '../store/uiSlice';
@@ -74,6 +75,7 @@ export function Header() {
   const search = useAppSelector((s) => s.ui.search);
   const searchFields = useAppSelector((s) => s.ui.searchFields);
   const searchMode = useAppSelector((s) => s.ui.searchMode);
+  const searchSubEpisodes = useAppSelector((s) => s.ui.searchSubEpisodes);
   const selectedLibraryId = useAppSelector((s) => s.ui.selectedLibraryId);
   const libraryName = useAppSelector(
     (s) => s.data.libraries.find((l) => l.id === selectedLibraryId)?.name ?? '全部'
@@ -153,6 +155,11 @@ export function Header() {
                 onChange={(_, data) =>
                   dispatch(setSearchField({ field: 'description', value: !!data.checked }))
                 }
+              />
+              <Checkbox
+                label="搜索细分剧集（直接搜索源文件）"
+                checked={searchSubEpisodes}
+                onChange={(_, data) => dispatch(setSearchSubEpisodes(!!data.checked))}
               />
               <Divider />
               <Text weight="semibold" size={300}>

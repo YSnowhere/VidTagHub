@@ -25,6 +25,7 @@ declare global {
         folder: string,
         baseName: string
       ) => Promise<{ ok: boolean; filePath?: string; error?: string }>;
+      saveCrop: (dataUrl: string) => Promise<{ ok: boolean; filePath?: string; error?: string }>;
     };
   }
 }

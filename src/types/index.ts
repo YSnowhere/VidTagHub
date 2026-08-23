@@ -28,8 +28,21 @@ export interface MediaItem {
   restricted: boolean;
 }
 
+export interface Series {
+  id: string;
+  libraryId: string;
+  title: string;
+  tags: string[];
+  coverPath?: string;
+  description: string;
+  createdAt: number;
+  restricted: boolean;
+  memberIds: string[];
+}
+
 export interface AppSettings {
   playerPath: string;
+  showFileExt: boolean;
 }
 
 export interface AppData {
@@ -37,6 +50,7 @@ export interface AppData {
   categories: string[];
   tags: Tag[];
   media: MediaItem[];
+  series: Series[];
   settings: AppSettings;
 }
 
@@ -53,5 +67,6 @@ export const DEFAULT_DATA: AppData = {
   categories: ['动漫', '真人'],
   tags: [],
   media: [],
-  settings: { playerPath: '' },
+  series: [],
+  settings: { playerPath: '', showFileExt: false },
 };

@@ -19,4 +19,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameFile: (filePath: string, newName: string) => ipcRenderer.invoke('file:rename', filePath, newName),
   saveFrame: (dataUrl: string, folder: string, baseName: string) =>
     ipcRenderer.invoke('file:saveFrame', dataUrl, folder, baseName),
+  saveCrop: (dataUrl: string) => ipcRenderer.invoke('file:saveCrop', dataUrl),
 });

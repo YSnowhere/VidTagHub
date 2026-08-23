@@ -8,6 +8,7 @@ import {
   DialogTitle,
   Field,
   Input,
+  Switch,
   Text,
   makeStyles,
   tokens,
@@ -32,6 +33,7 @@ export function SettingsDialog() {
   const dispatch = useAppDispatch();
   const open = useAppSelector((s) => s.ui.settingsOpen);
   const playerPath = useAppSelector((s) => s.data.settings.playerPath);
+  const showFileExt = useAppSelector((s) => s.data.settings.showFileExt);
   const styles = useStyles();
 
   const [path, setPath] = useState('');
@@ -101,6 +103,16 @@ export function SettingsDialog() {
               <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                 未配置播放器时，将使用系统默认程序打开媒体文件。
               </Text>
+              <Field label="文件名显示" hint="默认隐藏文件扩展名（如 .jpg、.mp4），可在卡片和详情中保持整洁">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text size={300}>显示文件扩展名</Text>
+                  <Switch
+                    checked={showFileExt}
+                    onChange={(_, data) => dispatch(updateSettings({ showFileExt: !!data.checked }))}
+                    label="显示"
+                  />
+                </div>
+              </Field>
             </div>
           </DialogContent>
           <DialogActions>

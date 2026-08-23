@@ -1,8 +1,9 @@
 import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
 import { ArrowLeft20Regular, Home20Regular, Tag20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { setSelectedCategory, setTagFilter, setView } from '../store/uiSlice';
+import { clearSeriesView, setSelectedCategory, setSelectionMode, setTagFilter, setView } from '../store/uiSlice';
 import { mediaUrl } from '../services/format';
+import { memberIdSet, seriesEffectiveTags } from '../services/series';
 import type { Tag } from '../types';
 
 const useStyles = makeStyles({
@@ -104,15 +105,24 @@ export function TagBrowser() {
   const categories = useAppSelector((s) => s.data.categories);
   const tags = useAppSelector((s) => s.data.tags);
   const media = useAppSelector((s) => s.data.media);
+  const series = useAppSelector((s) => s.data.series);
   const styles = useStyles();
 
-  const scopedMedia = media.filter((m) => !selectedLibraryId || m.libraryId === selectedLibraryId);
+  const scopedMedia = media.filter(
+    (m) =>
+      !memberIdSet(series).has(m.id) && (!selectedLibraryId || m.libraryId === selectedLibraryId)
+  );
+  const scopedSeries = series.filter((s) => !selectedLibraryId || s.libraryId === selectedLibraryId);
   const tagIdToCategory = new Map<string, string>();
   tags.forEach((t) => tagIdToCategory.set(t.id, t.category));
 
-  const countForTag = (tagId: string) => scopedMedia.filter((m) => m.tags.includes(tagId)).length;
+  const countForTag = (tagId: string) =>
+    scopedMedia.filter((m) => m.tags.includes(tagId)).length +
+    scopedSeries.filter((s) => seriesEffectiveTags(s, media).includes(tagId)).length;
   const countForCategory = (cat: string) =>
-    scopedMedia.filter((m) => m.tags.some((id) => tagIdToCategory.get(id) === cat)).length;
+    scopedMedia.filter((m) => m.tags.some((id) => tagIdToCategory.get(id) === cat)).length +
+    scopedSeries.filter((s) => seriesEffectiveTags(s, media).some((id) => tagIdToCategory.get(id) === cat))
+      .length;
 
   const handleSelectTag = (tag: Tag) => {
     dispatch(setTagFilter([tag.id]));
@@ -122,6 +132,8 @@ export function TagBrowser() {
   const goHome = () => {
     dispatch(setSelectedCategory(null));
     dispatch(setTagFilter([]));
+    dispatch(clearSeriesView());
+    dispatch(setSelectionMode(false));
     dispatch(setView('media'));
   };
 

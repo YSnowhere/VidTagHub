@@ -1,5 +1,5 @@
 <div align="center">
-  <img width="150px" src="public/icon.svg" alt="VidTagHub Logo" />
+  <img width="150px" src="public/icon.ico" alt="VidTagHub Logo" />
 </div>
 
 <div align="center">

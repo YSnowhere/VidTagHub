@@ -262,6 +262,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     title: 'VidTagHub',
+    icon: path.join(__dirname, '..', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

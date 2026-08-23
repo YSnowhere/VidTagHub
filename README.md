@@ -104,8 +104,8 @@ pnpm dist
 
 ## 📜 开源协议
 
-本项目采用 **[GNU General Public License v3.0 (GPL-3.0)](LICENSE)**（全开源 / Copyleft 协议）。
+本项目采用 **[MIT License](LICENSE)**。
 
-- 你可以自由使用、复制、修改、分发本软件
-- 修改后的衍生作品同样必须以 GPL-3.0 开源并公开源码
+- 你可以自由使用、复制、修改、分发本软件，包括用于商业用途
+- 只需保留版权声明与许可声明
 - © 2026 [YSnowhere](https://github.com/YSnowhere)

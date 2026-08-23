@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -453,6 +453,8 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+
   // 迁移：删除旧版全局数据文件，数据改为存储在对应的库文件夹中
   try {
     fs.rmSync(path.join(app.getPath('userData'), 'vision-library-data.json'), { force: true });

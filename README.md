@@ -8,7 +8,7 @@
 
 ✨ 对本地视频、图片进行分类管理的桌面工具
 
-[![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/github/license/YSnowhere/VidTagHub?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey?style=for-the-badge)](https://github.com/YSnowhere/VidTagHub/releases)
 
 </div>

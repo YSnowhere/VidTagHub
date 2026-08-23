@@ -8,7 +8,7 @@
 
 ✨ 对本地视频、图片进行分类管理的桌面工具
 
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey?style=for-the-badge)](https://github.com/YSnowhere/VidTagHub/releases)
 
 </div>
@@ -104,4 +104,8 @@ pnpm dist
 
 ## 📜 开源协议
 
-[MIT License](LICENSE) © 2026 [YSnowhere](https://github.com/YSnowhere)
+本项目采用 **[GNU General Public License v3.0 (GPL-3.0)](LICENSE)**（全开源 / Copyleft 协议）。
+
+- 你可以自由使用、复制、修改、分发本软件
+- 修改后的衍生作品同样必须以 GPL-3.0 开源并公开源码
+- © 2026 [YSnowhere](https://github.com/YSnowhere)

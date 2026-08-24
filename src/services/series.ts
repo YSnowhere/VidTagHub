@@ -27,10 +27,12 @@ export function seriesTypeText(s: Series, media: MediaItem[]): string {
     .filter((m): m is MediaItem => Boolean(m));
   const hasVideo = members.some((m) => m.type === 'video');
   const hasImage = members.some((m) => m.type === 'image');
-  if (hasVideo && hasImage) return '视频 / 图片';
-  if (hasVideo) return '视频';
-  if (hasImage) return '图片';
-  return '系列';
+  const hasPdf = members.some((m) => m.type === 'pdf');
+  const parts: string[] = [];
+  if (hasVideo) parts.push('视频');
+  if (hasImage) parts.push('图片');
+  if (hasPdf) parts.push('PDF');
+  return parts.length > 0 ? parts.join(' / ') : '系列';
 }
 
 export function seriesTotalSize(s: Series, media: MediaItem[]): number {

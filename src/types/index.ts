@@ -1,4 +1,4 @@
-export type MediaType = 'video' | 'image';
+export type MediaType = 'video' | 'image' | 'pdf';
 
 export interface Library {
   id: string;

@@ -24,6 +24,7 @@ import {
   Add20Regular,
   Collections20Regular,
   Camera20Regular,
+  Document20Regular,
 } from '@fluentui/react-icons';
 import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -53,7 +54,6 @@ import {
   seriesTotalSize,
 } from '../services/series';
 import { visibleTags } from '../services/tags';
-import { playMedia } from '../services/play';
 import { TagEditDialog } from './TagEditDialog';
 import { RenameDialog } from './RenameDialog';
 import { FrameCaptureDialog } from './FrameCaptureDialog';
@@ -246,6 +246,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
       : item.coverPath
       ? previewUrl(item.coverPath)
       : null;
+  const isPdf = item.type === 'pdf';
   const itemTags = item.tags
     .map((id) => tags.find((t) => t.id === id))
     .filter((t): t is Tag => Boolean(t));
@@ -262,11 +263,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
   };
 
   const handlePrimaryAction = () => {
-    if (item.type === 'video') {
-      void playMedia(item);
-    } else {
-      void window.electronAPI.openWithSystem(item.filePath);
-    }
+    void window.electronAPI.openWithSystem(item.filePath);
   };
 
   return (
@@ -287,9 +284,10 @@ function MediaDetail({ item }: { item: MediaItem }) {
         {coverSrc ? (
           <img className={styles.img} src={coverSrc} alt={item.fileName} draggable={false} decoding="async" />
         ) : (
-          <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {isPdf ? <Document20Regular style={{ width: 40, height: 40 }} /> : null}
             <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-              暂无封面
+              {isPdf ? '暂无封面，可自定义封面图片' : '暂无封面'}
             </Text>
           </div>
         )}
@@ -319,9 +317,9 @@ function MediaDetail({ item }: { item: MediaItem }) {
           <Badge
             size="small"
             appearance="tint"
-            color={item.type === 'video' ? 'informative' : 'success'}
+            color={item.type === 'video' ? 'informative' : item.type === 'pdf' ? 'warning' : 'success'}
           >
-            {item.type === 'video' ? '视频' : '图片'}
+            {item.type === 'video' ? '视频' : item.type === 'pdf' ? 'PDF' : '图片'}
           </Badge>
           {itemTags.length === 0 && <Text size={200}>未添加标签</Text>}
           {visibleItemTags.map((t) => (
@@ -338,10 +336,10 @@ function MediaDetail({ item }: { item: MediaItem }) {
       <div className={styles.actions}>
         <Button
           appearance="primary"
-          icon={item.type === 'video' ? <Play20Regular /> : <Eye20Regular />}
+          icon={item.type === 'video' ? <Play20Regular /> : item.type === 'pdf' ? <Document20Regular /> : <Eye20Regular />}
           onClick={handlePrimaryAction}
         >
-          {item.type === 'video' ? '播放' : '查看'}
+          {item.type === 'video' ? '播放' : item.type === 'pdf' ? '打开' : '查看'}
         </Button>
         <Button icon={<Delete20Regular />} onClick={handleRemove}>
           从库移除
@@ -369,9 +367,11 @@ function MediaDetail({ item }: { item: MediaItem }) {
               <Button icon={<Image20Regular />} onClick={() => void pickCover()}>
                 选择封面图片
               </Button>
-              <Button icon={<VideoClip20Regular />} onClick={() => setFrameCaptureOpen(true)}>
-                从视频截帧
-              </Button>
+              {item.type === 'video' && (
+                <Button icon={<VideoClip20Regular />} onClick={() => setFrameCaptureOpen(true)}>
+                  从视频截帧
+                </Button>
+              )}
             </>
           )}
           {item.coverPath && (
@@ -593,7 +593,7 @@ function SeriesDetail({ series }: { series: Series }) {
                   <img className={styles.memberThumb} src={thumb} alt="" draggable={false} loading="lazy" decoding="async" />
                 ) : (
                   <div className={styles.memberThumb} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <VideoClip20Regular />
+                    {m.type === 'pdf' ? <Document20Regular /> : <VideoClip20Regular />}
                   </div>
                 )}
                 <Text className={styles.memberName} size={200} title={m.fileName}>

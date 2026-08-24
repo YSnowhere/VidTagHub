@@ -1,10 +1,9 @@
 import { Badge, Button, Checkbox, Text, makeStyles, tokens } from '@fluentui/react-components';
-import { Play20Regular, PlayCircle24Regular, Eye20Regular } from '@fluentui/react-icons';
+import { Play20Regular, PlayCircle24Regular, Eye20Regular, Document20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedMedia, toggleSelectedId } from '../store/uiSlice';
 import { displayName, previewUrl } from '../services/format';
 import { visibleTags } from '../services/tags';
-import { playMedia } from '../services/play';
 import type { MediaItem, Tag } from '../types';
 
 const useStyles = makeStyles({
@@ -110,6 +109,7 @@ export function VideoCard({ item }: Props) {
       : item.coverPath
       ? previewUrl(item.coverPath)
       : null;
+  const isPdf = item.type === 'pdf';
   const itemTags = visibleTags(
     item.tags
       .map((id) => tags.find((t) => t.id === id))
@@ -129,11 +129,7 @@ export function VideoCard({ item }: Props) {
 
   const handleQuickAction = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (item.type === 'video') {
-      void playMedia(item);
-    } else {
-      void window.electronAPI.openWithSystem(item.filePath);
-    }
+    void window.electronAPI.openWithSystem(item.filePath);
   };
 
   return (
@@ -147,11 +143,11 @@ export function VideoCard({ item }: Props) {
           <img className={styles.img} src={coverSrc} alt={item.fileName} draggable={false} loading="lazy" decoding="async" />
         ) : (
           <div className={styles.placeholder}>
-            <PlayCircle24Regular />
+            {isPdf ? <Document20Regular /> : <PlayCircle24Regular />}
           </div>
         )}
-        <Badge className={styles.typeBadge} size="small" appearance="filled" color={item.type === 'video' ? 'informative' : 'success'}>
-          {item.type === 'video' ? '视频' : '图片'}
+        <Badge className={styles.typeBadge} size="small" appearance="filled" color={item.type === 'video' ? 'informative' : item.type === 'pdf' ? 'warning' : 'success'}>
+          {item.type === 'video' ? '视频' : item.type === 'pdf' ? 'PDF' : '图片'}
         </Badge>
         {selectionMode && (
           <div className={styles.selectBox}>
@@ -165,12 +161,12 @@ export function VideoCard({ item }: Props) {
         )}
         <div className={`${styles.coverActions} ${selected ? styles.cardHoverActions : ''}`}>
           <Button
-            icon={item.type === 'video' ? <Play20Regular /> : <Eye20Regular />}
+            icon={item.type === 'video' ? <Play20Regular /> : item.type === 'pdf' ? <Document20Regular /> : <Eye20Regular />}
             size="small"
             appearance="primary"
             onClick={handleQuickAction}
           >
-            {item.type === 'video' ? '播放' : '查看'}
+            {item.type === 'video' ? '播放' : item.type === 'pdf' ? '打开' : '查看'}
           </Button>
         </div>
       </div>

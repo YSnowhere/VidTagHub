@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 
-type MediaType = 'video' | 'image';
+type MediaType = 'video' | 'image' | 'pdf';
 
 interface Library {
   id: string;
@@ -79,6 +79,7 @@ interface ScanResult {
 
 const VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m4v', '.mpg', '.mpeg', '.rmvb'];
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.ico'];
+const PDF_EXTS = ['.pdf'];
 
 const DEFAULT_TAG_DATA: TagData = {
   categories: ['动漫', '真人'],
@@ -320,6 +321,8 @@ function scanMedia(folder: string): ScanResult[] {
           ? 'video'
           : IMAGE_EXTS.includes(ext)
           ? 'image'
+          : PDF_EXTS.includes(ext)
+          ? 'pdf'
           : null;
         if (!type) continue;
         let stat;
@@ -353,9 +356,10 @@ const MIME: Record<string, string> = {
   '.mp4': 'video/mp4',
   '.mkv': 'video/x-matroska',
   '.webm': 'video/webm',
+  '.pdf': 'application/pdf',
 };
 
-const MEDIA_EXTENSIONS = [...VIDEO_EXTS, ...IMAGE_EXTS].map((e) => e.slice(1));
+const MEDIA_EXTENSIONS = [...VIDEO_EXTS, ...IMAGE_EXTS, ...PDF_EXTS].map((e) => e.slice(1));
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },

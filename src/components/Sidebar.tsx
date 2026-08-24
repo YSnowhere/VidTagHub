@@ -18,11 +18,12 @@ import {
   ArrowClockwise20Regular,
   Delete20Regular,
   Folder20Regular,
+  Rename20Regular,
   Tag20Regular,
 } from '@fluentui/react-icons';
 import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { addMediaFromScan, removeLibrary } from '../store/dataSlice';
+import { addMediaFromScan, removeLibrary, upsertLibrary } from '../store/dataSlice';
 import {
   setLibraryDialogOpen,
   setSelectedLibrary,
@@ -31,6 +32,7 @@ import {
 } from '../store/uiSlice';
 import { store } from '../store';
 import { memberIdSet } from '../services/series';
+import { RenameLibraryDialog } from './RenameLibraryDialog';
 import type { Library } from '../types';
 
 const useStyles = makeStyles({
@@ -104,6 +106,7 @@ export function Sidebar() {
 
   const styles = useStyles();
   const [removeTarget, setRemoveTarget] = useState<Library | null>(null);
+  const [renameTarget, setRenameTarget] = useState<Library | null>(null);
 
   const hiddenMembers = memberIdSet(series);
 
@@ -207,6 +210,17 @@ export function Sidebar() {
               }}
             />
           </Tooltip>
+          <Tooltip content="重命名库" relationship="label">
+            <Button
+              icon={<Rename20Regular />}
+              size="small"
+              appearance="subtle"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRenameTarget(lib);
+              }}
+            />
+          </Tooltip>
           <Tooltip content="删除库（不删除本地文件）" relationship="label">
             <Button
               icon={<Delete20Regular />}
@@ -253,6 +267,18 @@ export function Sidebar() {
           </DialogBody>
         </DialogSurface>
       </Dialog>
+
+      <RenameLibraryDialog
+        open={renameTarget !== null}
+        currentName={renameTarget?.name ?? ''}
+        onClose={() => setRenameTarget(null)}
+        onConfirm={(name) => {
+          if (renameTarget) {
+            dispatch(upsertLibrary({ id: renameTarget.id, name, path: renameTarget.path }));
+            setRenameTarget(null);
+          }
+        }}
+      />
     </div>
   );
 }

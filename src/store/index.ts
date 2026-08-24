@@ -14,6 +14,7 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 store.subscribe(() => {
   const state = store.getState();
   if (!state.ui.hydrated || !window.electronAPI) return;
+  if (window.__tagManagerMode) return;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     void window.electronAPI.saveData(JSON.parse(JSON.stringify(state.data)));

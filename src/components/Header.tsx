@@ -25,7 +25,6 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   setSearch,
   setLibraryDialogOpen,
-  setTagManagerOpen,
   setSettingsOpen,
   setSearchField,
   setSearchMode,
@@ -189,7 +188,7 @@ export function Header() {
         >
           {importing ? '正在导入…' : '添加文件'}
         </Button>
-        <Button icon={<Tag20Regular />} onClick={() => dispatch(setTagManagerOpen(true))}>
+        <Button icon={<Tag20Regular />} onClick={() => void window.electronAPI.openTagManager()}>
           标签管理
         </Button>
         <Button icon={<Settings20Regular />} onClick={() => dispatch(setSettingsOpen(true))}>

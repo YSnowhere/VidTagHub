@@ -11,6 +11,7 @@ export interface Tag {
   name: string;
   category: string;
   coverPath?: string;
+  restricted?: boolean;
 }
 
 export interface MediaItem {

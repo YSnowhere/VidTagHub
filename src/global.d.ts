@@ -1,10 +1,14 @@
-import type { AppData, ScanResult } from './types';
+import type { AppData, ScanResult, Tag } from './types';
 
 declare global {
   interface Window {
+    __tagManagerMode?: boolean;
     electronAPI: {
       loadData: () => Promise<AppData>;
       saveData: (data: AppData) => Promise<{ ok: boolean; error?: string }>;
+      saveTags: (categories: string[], tags: Tag[]) => Promise<{ ok: boolean; error?: string }>;
+      onTagsChanged: (callback: () => void) => () => void;
+      openTagManager: () => Promise<{ ok: boolean }>;
       pickFolder: () => Promise<string | null>;
       pickFiles: () => Promise<string[]>;
       pickImage: () => Promise<string | null>;

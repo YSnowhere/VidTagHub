@@ -17,6 +17,7 @@ interface Tag {
   name: string;
   category: string;
   coverPath?: string;
+  restricted?: boolean;
 }
 
 interface MediaItem {
@@ -97,6 +98,7 @@ const DEFAULT_GLOBAL: GlobalData = {
 };
 
 let mainWindow: BrowserWindow | null = null;
+let tagManagerWindow: BrowserWindow | null = null;
 
 const clone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj)) as T;
 
@@ -196,6 +198,23 @@ function saveData(data: AppData): void {
     } catch {
       /* 文件夹可能不可用，忽略 */
     }
+  }
+}
+
+function saveTags(categories: string[], tags: Tag[]): { ok: boolean; error?: string } {
+  try {
+    const tagData: TagData = { categories, tags };
+    fs.mkdirSync(path.dirname(tagsFile()), { recursive: true });
+    fs.writeFileSync(tagsFile(), JSON.stringify(tagData, null, 2), 'utf-8');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function notifyTagsChanged(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('tags:changed');
   }
 }
 
@@ -308,8 +327,53 @@ function createWindow(): void {
   });
 }
 
+function createTagManagerWindow(): void {
+  if (tagManagerWindow) {
+    tagManagerWindow.focus();
+    return;
+  }
+  tagManagerWindow = new BrowserWindow({
+    width: 980,
+    height: 700,
+    minWidth: 760,
+    minHeight: 520,
+    title: '标签管理 - VidTagHub',
+    icon: path.join(__dirname, '..', 'icon.ico'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
+  });
+
+  const devUrl = process.env.ELECTRON_START_URL;
+  if (devUrl) {
+    void tagManagerWindow.loadURL(`${devUrl}?page=tagmanager`);
+  } else {
+    void tagManagerWindow.loadFile(path.join(__dirname, '..', 'index.html'), {
+      search: 'page=tagmanager',
+    });
+  }
+
+  tagManagerWindow.on('closed', () => {
+    tagManagerWindow = null;
+  });
+}
+
 function registerIpc(): void {
   ipcMain.handle('data:load', () => loadData());
+
+  ipcMain.handle('window:openTagManager', () => {
+    createTagManagerWindow();
+    return { ok: true };
+  });
+
+  ipcMain.handle('tags:save', (_event, categories: string[], tags: Tag[]) => {
+    const res = saveTags(categories, tags);
+    if (res.ok) notifyTagsChanged();
+    return res;
+  });
 
   ipcMain.handle('data:save', (_event, data: AppData) => {
     try {

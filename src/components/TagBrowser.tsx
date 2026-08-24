@@ -4,6 +4,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { clearSeriesView, setSelectedCategory, setSelectionMode, setTagFilter, setView } from '../store/uiSlice';
 import { mediaUrl } from '../services/format';
 import { memberIdSet, seriesEffectiveTags } from '../services/series';
+import { visibleTags } from '../services/tags';
 import type { Tag } from '../types';
 
 const useStyles = makeStyles({
@@ -102,6 +103,7 @@ export function TagBrowser() {
   const dispatch = useAppDispatch();
   const selectedCategory = useAppSelector((s) => s.ui.selectedCategory);
   const selectedLibraryId = useAppSelector((s) => s.ui.selectedLibraryId);
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const categories = useAppSelector((s) => s.data.categories);
   const tags = useAppSelector((s) => s.data.tags);
   const media = useAppSelector((s) => s.data.media);
@@ -113,8 +115,9 @@ export function TagBrowser() {
       !memberIdSet(series).has(m.id) && (!selectedLibraryId || m.libraryId === selectedLibraryId)
   );
   const scopedSeries = series.filter((s) => !selectedLibraryId || s.libraryId === selectedLibraryId);
+  const scopedTags = visibleTags(tags, showNSFW);
   const tagIdToCategory = new Map<string, string>();
-  tags.forEach((t) => tagIdToCategory.set(t.id, t.category));
+  scopedTags.forEach((t) => tagIdToCategory.set(t.id, t.category));
 
   const countForTag = (tagId: string) =>
     scopedMedia.filter((m) => m.tags.includes(tagId)).length +
@@ -194,7 +197,7 @@ export function TagBrowser() {
           <div className={styles.grid}>
             {categories.map((cat) => {
               const [c1, c2] = gradientFor(cat);
-              const catTags = tags.filter((t) => t.category === cat);
+              const catTags = scopedTags.filter((t) => t.category === cat);
               const coverTag = catTags.find((t) => t.coverPath) ?? catTags[0];
               return (
                 <div
@@ -227,7 +230,7 @@ export function TagBrowser() {
     );
   }
 
-  const catTags = tags.filter((t) => t.category === selectedCategory);
+  const catTags = scopedTags.filter((t) => t.category === selectedCategory);
 
   return (
     <div className={styles.root}>

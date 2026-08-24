@@ -14,6 +14,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { useAppSelector } from '../store/hooks';
+import { visibleTags } from '../services/tags';
 
 interface Props {
   open: boolean;
@@ -57,6 +58,7 @@ export function TagEditDialog({
 }: Props) {
   const categories = useAppSelector((s) => s.data.categories);
   const allTags = useAppSelector((s) => s.data.tags);
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const styles = useStyles();
 
   return (
@@ -87,7 +89,7 @@ export function TagEditDialog({
             </div>
 
             {categories.map((cat) => {
-              const catTags = allTags.filter((t) => t.category === cat);
+              const catTags = visibleTags(allTags, showNSFW).filter((t) => t.category === cat);
               if (catTags.length === 0) return null;
               return (
                 <div key={cat} className={styles.catGroup}>
@@ -111,7 +113,7 @@ export function TagEditDialog({
               );
             })}
 
-            {categories.every((cat) => allTags.filter((t) => t.category === cat).length === 0) && (
+            {categories.every((cat) => visibleTags(allTags, showNSFW).filter((t) => t.category === cat).length === 0) && (
               <Text size={200} style={{ color: tokens.colorNeutralForeground3, display: 'block', marginTop: 8 }}>
                 暂无标签，可在右上角「标签管理」中添加
               </Text>

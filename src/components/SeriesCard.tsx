@@ -4,7 +4,8 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedSeries, setSeriesView, setView } from '../store/uiSlice';
 import { mediaUrl } from '../services/format';
 import { seriesEffectiveTags, seriesTypeText } from '../services/series';
-import type { Series } from '../types';
+import { visibleTags } from '../services/tags';
+import type { Series, Tag } from '../types';
 
 const useStyles = makeStyles({
   card: {
@@ -90,9 +91,15 @@ export function SeriesCard({ series }: Props) {
   const selectedSeriesId = useAppSelector((s) => s.ui.selectedSeriesId);
   const tags = useAppSelector((s) => s.data.tags);
   const media = useAppSelector((s) => s.data.media);
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const styles = useStyles();
 
-  const itemTags = seriesEffectiveTags(series, media).map((id) => tags.find((t) => t.id === id)).filter(Boolean);
+  const itemTags = visibleTags(
+    seriesEffectiveTags(series, media)
+      .map((id) => tags.find((t) => t.id === id))
+      .filter((t): t is Tag => Boolean(t)),
+    showNSFW
+  );
   const selected = selectedSeriesId === series.id;
   const memberCount = series.memberIds.length;
   const typeText = seriesTypeText(series, media);

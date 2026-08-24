@@ -52,13 +52,14 @@ import {
   seriesTypeText,
   seriesTotalSize,
 } from '../services/series';
+import { visibleTags } from '../services/tags';
 import { playMedia } from '../services/play';
 import { TagEditDialog } from './TagEditDialog';
 import { RenameDialog } from './RenameDialog';
 import { FrameCaptureDialog } from './FrameCaptureDialog';
 import { CropImageDialog } from './CropImageDialog';
 import { SeriesTitleDialog } from './SeriesTitleDialog';
-import type { MediaItem, Series } from '../types';
+import type { MediaItem, Series, Tag } from '../types';
 
 const useStyles = makeStyles({
   root: {
@@ -229,6 +230,7 @@ export function DetailPanel() {
 function MediaDetail({ item }: { item: MediaItem }) {
   const dispatch = useAppDispatch();
   const tags = useAppSelector((s) => s.data.tags);
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const showFileExt = useAppSelector((s) => s.data.settings.showFileExt);
   const styles = useStyles();
 
@@ -245,7 +247,10 @@ function MediaDetail({ item }: { item: MediaItem }) {
       : item.coverPath
       ? mediaUrl(item.coverPath)
       : null;
-  const itemTags = item.tags.map((id) => tags.find((t) => t.id === id)).filter(Boolean);
+  const itemTags = item.tags
+    .map((id) => tags.find((t) => t.id === id))
+    .filter((t): t is Tag => Boolean(t));
+  const visibleItemTags = visibleTags(itemTags, showNSFW);
 
   const pickCover = async () => {
     const p = await window.electronAPI.pickImage();
@@ -320,9 +325,9 @@ function MediaDetail({ item }: { item: MediaItem }) {
             {item.type === 'video' ? '视频' : '图片'}
           </Badge>
           {itemTags.length === 0 && <Text size={200}>未添加标签</Text>}
-          {itemTags.map((t) => (
-            <Badge key={t!.id} size="small" appearance="tint">
-              {t!.name}
+          {visibleItemTags.map((t) => (
+            <Badge key={t.id} size="small" appearance="tint">
+              {t.name}
             </Badge>
           ))}
         </div>
@@ -437,6 +442,7 @@ function SeriesDetail({ series }: { series: Series }) {
   const dispatch = useAppDispatch();
   const tags = useAppSelector((s) => s.data.tags);
   const media = useAppSelector((s) => s.data.media);
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const styles = useStyles();
 
   const [renameOpen, setRenameOpen] = useState(false);
@@ -459,7 +465,10 @@ function SeriesDetail({ series }: { series: Series }) {
     return m.coverPath ? mediaUrl(m.coverPath) : null;
   })();
 
-  const itemTags = effectiveTags.map((id) => tags.find((t) => t.id === id)).filter(Boolean);
+  const itemTags = effectiveTags
+    .map((id) => tags.find((t) => t.id === id))
+    .filter((t): t is Tag => Boolean(t));
+  const visibleItemTags = visibleTags(itemTags, showNSFW);
 
   const pickCover = async () => {
     const p = await window.electronAPI.pickImage();
@@ -539,9 +548,9 @@ function SeriesDetail({ series }: { series: Series }) {
             {typeText}
           </Badge>
           {itemTags.length === 0 && <Text size={200}>未添加标签</Text>}
-          {itemTags.map((t) => (
-            <Badge key={t!.id} size="small" appearance="tint">
-              {t!.name}
+          {visibleItemTags.map((t) => (
+            <Badge key={t.id} size="small" appearance="tint">
+              {t.name}
             </Badge>
           ))}
         </div>

@@ -3,6 +3,14 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('electronAPI', {
   loadData: () => ipcRenderer.invoke('data:load'),
   saveData: (data: unknown) => ipcRenderer.invoke('data:save', data),
+  saveTags: (categories: string[], tags: unknown[]) => ipcRenderer.invoke('tags:save', categories, tags),
+  onTagsChanged: (callback: () => void) => {
+    ipcRenderer.on('tags:changed', callback);
+    return () => {
+      ipcRenderer.removeListener('tags:changed', callback);
+    };
+  },
+  openTagManager: () => ipcRenderer.invoke('window:openTagManager'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   pickFiles: () => ipcRenderer.invoke('dialog:pickFiles'),
   pickImage: () => ipcRenderer.invoke('dialog:pickImage'),

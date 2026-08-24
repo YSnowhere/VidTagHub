@@ -3,8 +3,9 @@ import { Play20Regular, PlayCircle24Regular, Eye20Regular } from '@fluentui/reac
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedMedia, toggleSelectedId } from '../store/uiSlice';
 import { displayName, mediaUrl } from '../services/format';
+import { visibleTags } from '../services/tags';
 import { playMedia } from '../services/play';
-import type { MediaItem } from '../types';
+import type { MediaItem, Tag } from '../types';
 
 const useStyles = makeStyles({
   card: {
@@ -98,6 +99,7 @@ export function VideoCard({ item }: Props) {
   const selectionMode = useAppSelector((s) => s.ui.selectionMode);
   const selectedIds = useAppSelector((s) => s.ui.selectedIds);
   const showFileExt = useAppSelector((s) => s.data.settings.showFileExt);
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const tags = useAppSelector((s) => s.data.tags);
   const styles = useStyles();
 
@@ -109,7 +111,12 @@ export function VideoCard({ item }: Props) {
       : item.coverPath
       ? mediaUrl(item.coverPath)
       : null;
-  const itemTags = item.tags.map((id) => tags.find((t) => t.id === id)).filter(Boolean);
+  const itemTags = visibleTags(
+    item.tags
+      .map((id) => tags.find((t) => t.id === id))
+      .filter((t): t is Tag => Boolean(t)),
+    showNSFW
+  );
   const selected = selectedMediaId === item.id;
   const isChecked = selectedIds.includes(item.id);
 

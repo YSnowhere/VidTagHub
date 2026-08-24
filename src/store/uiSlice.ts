@@ -12,7 +12,6 @@ interface UiState {
   selectedIds: string[];
   seriesTarget: string | null;
   libraryDialogOpen: boolean;
-  tagManagerOpen: boolean;
   settingsOpen: boolean;
   showNSFW: boolean;
   searchFields: Record<'name' | 'tags' | 'description', boolean>;
@@ -34,7 +33,6 @@ const initialState: UiState = {
   selectedIds: [],
   seriesTarget: null,
   libraryDialogOpen: false,
-  tagManagerOpen: false,
   settingsOpen: false,
   showNSFW: false,
   searchFields: { name: true, tags: true, description: true },
@@ -102,9 +100,6 @@ const uiSlice = createSlice({
     setLibraryDialogOpen: (state, action: PayloadAction<boolean>) => {
       state.libraryDialogOpen = action.payload;
     },
-    setTagManagerOpen: (state, action: PayloadAction<boolean>) => {
-      state.tagManagerOpen = action.payload;
-    },
     setSettingsOpen: (state, action: PayloadAction<boolean>) => {
       state.settingsOpen = action.payload;
     },
@@ -157,7 +152,6 @@ export const {
   clearSelectedIds,
   setSeriesTarget,
   setLibraryDialogOpen,
-  setTagManagerOpen,
   setSettingsOpen,
   setShowNSFW,
   setSearchField,

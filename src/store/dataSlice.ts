@@ -11,6 +11,7 @@ const dataSlice = createSlice({
       ...DEFAULT_DATA,
       ...action.payload,
       categories: action.payload.categories?.length ? action.payload.categories : DEFAULT_DATA.categories,
+      tags: (action.payload.tags ?? []).map((t) => ({ ...t, restricted: t.restricted ?? false })),
       media: action.payload.media.map((m) => ({ ...m, restricted: m.restricted ?? false })),
       series: (action.payload.series ?? []).map((s) => ({
         ...s,
@@ -21,6 +22,12 @@ const dataSlice = createSlice({
       })),
       settings: { ...DEFAULT_DATA.settings, ...(action.payload.settings ?? {}) },
     }),
+    hydrateTags: (state, action: PayloadAction<{ categories: string[]; tags: Tag[] }>) => {
+      state.categories = action.payload.categories?.length
+        ? action.payload.categories
+        : DEFAULT_DATA.categories;
+      state.tags = (action.payload.tags ?? []).map((t) => ({ ...t, restricted: t.restricted ?? false }));
+    },
     addLibrary: {
       reducer: (state, action: PayloadAction<Library>) => {
         if (state.libraries.some((l) => l.path === action.payload.path)) return;
@@ -103,12 +110,12 @@ const dataSlice = createSlice({
         state.tags.push(tag);
       },
       prepare: (payload: { name: string; category: string }) => ({
-        payload: { id: nanoid(), name: payload.name, category: payload.category },
+        payload: { id: nanoid(), name: payload.name, category: payload.category, restricted: false },
       }),
     },
     updateTag: (
       state,
-      action: PayloadAction<{ id: string; patch: Partial<Pick<Tag, 'name' | 'category' | 'coverPath'>> }>
+      action: PayloadAction<{ id: string; patch: Partial<Pick<Tag, 'name' | 'category' | 'coverPath' | 'restricted'>> }>
     ) => {
       const tag = state.tags.find((t) => t.id === action.payload.id);
       if (tag) Object.assign(tag, action.payload.patch);
@@ -173,6 +180,7 @@ const dataSlice = createSlice({
 
 export const {
   hydrate,
+  hydrateTags,
   addLibrary,
   removeLibrary,
   addMediaFromScan,

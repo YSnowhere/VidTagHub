@@ -33,7 +33,7 @@ import {
   removeTag,
   updateTag,
 } from '../store/dataSlice';
-import { mediaUrl } from '../services/format';
+import { previewUrl } from '../services/format';
 import { CropImageDialog } from './CropImageDialog';
 
 const TAG_COVER_RATIO = 16 / 10;
@@ -365,7 +365,7 @@ export function TagManagerPage() {
                 catTags.map((tag) => (
                   <div key={tag.id} className={styles.tagRow}>
                     {tag.coverPath ? (
-                      <img className={styles.tagThumb} src={mediaUrl(tag.coverPath)} alt="" draggable={false} />
+                      <img className={styles.tagThumb} src={previewUrl(tag.coverPath)} alt="" draggable={false} loading="lazy" decoding="async" />
                     ) : (
                       <div className={styles.tagThumbPlaceholder}>
                         <Tag20Regular />

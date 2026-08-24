@@ -15,7 +15,7 @@ import {
 import { Folder20Regular } from '@fluentui/react-icons';
 import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { addLibrary, addMediaFromScan } from '../store/dataSlice';
+import { addLibrary, addMediaFromScan, upsertLibrary, setLibraryData } from '../store/dataSlice';
 import { setLibraryDialogOpen } from '../store/uiSlice';
 import { store } from '../store';
 
@@ -68,13 +68,31 @@ export function LibraryDialog() {
       return;
     }
 
-    dispatch(addLibrary({ name: name.trim(), path: folder }));
-    const lib = store.getState().data.libraries.find((l) => l.path === folder);
-    if (lib) {
-      setScanning(true);
+    setScanning(true);
+    try {
       await window.electronAPI.ensureFolder(folder);
-      const files = await window.electronAPI.scanLibrary(folder);
-      dispatch(addMediaFromScan({ libraryId: lib.id, files }));
+      const adopted = await window.electronAPI.adoptLibrary(folder);
+      if (adopted) {
+        const libName = adopted.libraryName ?? name.trim();
+        const knownId = adopted.libraryId
+          ? store.getState().data.libraries.find((l) => l.id === adopted.libraryId)?.id ?? null
+          : null;
+        if (knownId) {
+          dispatch(upsertLibrary({ id: knownId, name: libName, path: folder }));
+          dispatch(setLibraryData({ libraryId: knownId, media: adopted.media, series: adopted.series }));
+        } else {
+          const action = dispatch(addLibrary({ name: libName, path: folder }));
+          dispatch(setLibraryData({ libraryId: action.payload.id, media: adopted.media, series: adopted.series }));
+        }
+      } else {
+        dispatch(addLibrary({ name: name.trim(), path: folder }));
+        const lib = store.getState().data.libraries.find((l) => l.path === folder);
+        if (lib) {
+          const files = await window.electronAPI.scanLibrary(folder);
+          dispatch(addMediaFromScan({ libraryId: lib.id, files }));
+        }
+      }
+    } finally {
       setScanning(false);
     }
     dispatch(setLibraryDialogOpen(false));

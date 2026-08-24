@@ -10,7 +10,7 @@ import {
   clearTagFilter,
   clearSelectedIds,
   clearSeriesView,
-  setSelectedCategory,
+  setSelectedMedia,
   setSelectedSeries,
   setSelectionMode,
   setTagFilter,
@@ -73,9 +73,11 @@ function MediaGrid() {
   const tags = useAppSelector((s) => s.data.tags);
   const libraries = useAppSelector((s) => s.data.libraries);
   const selectedLibraryId = useAppSelector((s) => s.ui.selectedLibraryId);
+  const selectedCategory = useAppSelector((s) => s.ui.selectedCategory);
   const search = useAppSelector((s) => s.ui.search);
   const tagFilter = useAppSelector((s) => s.ui.tagFilter);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
+  const onlyNSFW = useAppSelector((s) => s.ui.onlyNSFW);
   const searchFields = useAppSelector((s) => s.ui.searchFields);
   const searchMode = useAppSelector((s) => s.ui.searchMode);
   const selectionMode = useAppSelector((s) => s.ui.selectionMode);
@@ -90,7 +92,7 @@ function MediaGrid() {
   const [titleDialog, setTitleDialog] = useState(false);
 
   const goHome = () => {
-    dispatch(setSelectedCategory(null));
+    dispatch(setSelectedMedia(null));
     dispatch(setTagFilter([]));
     dispatch(clearSeriesView());
     dispatch(setSelectionMode(false));
@@ -102,8 +104,12 @@ function MediaGrid() {
       dispatch(clearSeriesView());
       return;
     }
-    dispatch(setTagFilter([]));
-    dispatch(setView('tags'));
+    if (selectedCategory) {
+      dispatch(setTagFilter([]));
+      dispatch(setView('tags'));
+      return;
+    }
+    goHome();
   };
 
   const items = useMemo<GridItem[]>(() => {
@@ -126,6 +132,7 @@ function MediaGrid() {
       if (hiddenMembers.has(m.id)) return false;
       if (selectedLibraryId && m.libraryId !== selectedLibraryId) return false;
       if (!showNSFW && m.restricted) return false;
+      if (onlyNSFW && !m.restricted) return false;
       if (tagFilter.length && !tagFilter.every((t) => m.tags.includes(t))) return false;
       if (keywords.length) {
         return searchMode === 'or'
@@ -138,6 +145,7 @@ function MediaGrid() {
     const matchSeries = (s: Series): boolean => {
       if (selectedLibraryId && s.libraryId !== selectedLibraryId) return false;
       if (!showNSFW && seriesEffectiveRestricted(s, media)) return false;
+      if (onlyNSFW && !seriesEffectiveRestricted(s, media)) return false;
       const effTags = seriesEffectiveTags(s, media);
       if (tagFilter.length && !tagFilter.every((t) => effTags.includes(t))) return false;
       if (keywords.length) {
@@ -167,6 +175,7 @@ function MediaGrid() {
       list = members
         .filter((m) => {
           if (!showNSFW && m.restricted) return false;
+          if (onlyNSFW && !m.restricted) return false;
           if (keywords.length) {
             return searchMode === 'or'
               ? keywords.some((kw) => mediaKeywordHit(m, kw))
@@ -194,6 +203,7 @@ function MediaGrid() {
     search,
     tagFilter,
     showNSFW,
+    onlyNSFW,
     searchFields,
     searchMode,
     searchSubEpisodes,
@@ -239,12 +249,21 @@ function MediaGrid() {
   return (
     <div className={styles.root}>
       <div className={styles.bar}>
-        <Button appearance="outline" size="small" icon={<ArrowLeft20Regular />} onClick={goUp}>
-          返回上级
-        </Button>
-        <Button appearance="subtle" size="small" icon={<Home20Regular />} onClick={goHome}>
-          回到主页
-        </Button>
+        {viewingSeries && (
+          <Button appearance="outline" size="small" icon={<ArrowLeft20Regular />} onClick={goUp}>
+            返回上级
+          </Button>
+        )}
+        {!viewingSeries && tagFilter.length > 0 && (
+          <>
+            <Button appearance="outline" size="small" icon={<ArrowLeft20Regular />} onClick={goUp}>
+              返回上级
+            </Button>
+            <Button appearance="subtle" size="small" icon={<Home20Regular />} onClick={goHome}>
+              回到主页
+            </Button>
+          </>
+        )}
         <Text size={300}>共 {items.length} 项</Text>
         {viewingSeries && (
           <Badge appearance="tint" color="brand">

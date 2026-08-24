@@ -1,7 +1,8 @@
 export const mediaUrl = (filePath: string): string => 'media://local/' + encodeURIComponent(filePath);
 
-export function displayName(fileName: string, showFileExt: boolean): string {
-  if (showFileExt) return fileName;
+export const previewUrl = (filePath: string): string => 'media://local/' + encodeURIComponent(filePath) + '?preview=1';
+
+export function displayName(fileName: string): string {
   const dot = fileName.lastIndexOf('.');
   return dot > 0 ? fileName.slice(0, dot) : fileName;
 }

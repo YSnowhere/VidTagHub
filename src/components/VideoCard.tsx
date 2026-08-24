@@ -2,7 +2,7 @@ import { Badge, Button, Checkbox, Text, makeStyles, tokens } from '@fluentui/rea
 import { Play20Regular, PlayCircle24Regular, Eye20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedMedia, toggleSelectedId } from '../store/uiSlice';
-import { displayName, mediaUrl } from '../services/format';
+import { displayName, previewUrl } from '../services/format';
 import { visibleTags } from '../services/tags';
 import { playMedia } from '../services/play';
 import type { MediaItem, Tag } from '../types';
@@ -98,7 +98,6 @@ export function VideoCard({ item }: Props) {
   const selectedMediaId = useAppSelector((s) => s.ui.selectedMediaId);
   const selectionMode = useAppSelector((s) => s.ui.selectionMode);
   const selectedIds = useAppSelector((s) => s.ui.selectedIds);
-  const showFileExt = useAppSelector((s) => s.data.settings.showFileExt);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const tags = useAppSelector((s) => s.data.tags);
   const styles = useStyles();
@@ -106,10 +105,10 @@ export function VideoCard({ item }: Props) {
   const coverSrc =
     item.type === 'image'
       ? item.coverPath
-        ? mediaUrl(item.coverPath)
-        : mediaUrl(item.filePath)
+        ? previewUrl(item.coverPath)
+        : previewUrl(item.filePath)
       : item.coverPath
-      ? mediaUrl(item.coverPath)
+      ? previewUrl(item.coverPath)
       : null;
   const itemTags = visibleTags(
     item.tags
@@ -145,7 +144,7 @@ export function VideoCard({ item }: Props) {
     >
       <div className={styles.cover}>
         {coverSrc ? (
-          <img className={styles.img} src={coverSrc} alt={item.fileName} draggable={false} />
+          <img className={styles.img} src={coverSrc} alt={item.fileName} draggable={false} loading="lazy" decoding="async" />
         ) : (
           <div className={styles.placeholder}>
             <PlayCircle24Regular />
@@ -177,7 +176,7 @@ export function VideoCard({ item }: Props) {
       </div>
       <div className={styles.info}>
         <Text className={styles.name} size={200} title={item.fileName}>
-          {displayName(item.fileName, showFileExt)}
+          {displayName(item.fileName)}
         </Text>
         <div className={styles.tags}>
           {itemTags.map((t) => (

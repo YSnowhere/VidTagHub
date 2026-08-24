@@ -1,5 +1,5 @@
 import { createSlice, nanoid, PayloadAction } from '@reduxjs/toolkit';
-import { AppData, AppSettings, Library, MediaItem, ScanResult, Series, Tag, DEFAULT_DATA } from '../types';
+import { AppData, Library, MediaItem, ScanResult, Series, Tag, DEFAULT_DATA } from '../types';
 
 const initialState: AppData = DEFAULT_DATA;
 
@@ -20,7 +20,6 @@ const dataSlice = createSlice({
         restricted: s.restricted ?? false,
         description: s.description ?? '',
       })),
-      settings: { ...DEFAULT_DATA.settings, ...(action.payload.settings ?? {}) },
     }),
     hydrateTags: (state, action: PayloadAction<{ categories: string[]; tags: Tag[] }>) => {
       state.categories = action.payload.categories?.length
@@ -42,6 +41,26 @@ const dataSlice = createSlice({
       state.libraries = state.libraries.filter((l) => l.id !== id);
       state.media = state.media.filter((m) => m.libraryId !== id);
       state.series = state.series.filter((s) => s.libraryId !== id);
+    },
+    upsertLibrary: (state, action: PayloadAction<Library>) => {
+      const lib = action.payload;
+      const existing = state.libraries.find((l) => l.id === lib.id);
+      if (existing) {
+        existing.name = lib.name;
+        existing.path = lib.path;
+      } else {
+        state.libraries.push(lib);
+      }
+    },
+    setLibraryData: (
+      state,
+      action: PayloadAction<{ libraryId: string; media: MediaItem[]; series: Series[] }>
+    ) => {
+      const { libraryId, media, series } = action.payload;
+      state.media = state.media.filter((m) => m.libraryId !== libraryId);
+      state.series = state.series.filter((s) => s.libraryId !== libraryId);
+      state.media.push(...media.map((m) => ({ ...m, libraryId })));
+      state.series.push(...series.map((s) => ({ ...s, libraryId })));
     },
     addMediaFromScan: (state, action: PayloadAction<{ libraryId: string; files: ScanResult[] }>) => {
       const { libraryId, files } = action.payload;
@@ -172,9 +191,6 @@ const dataSlice = createSlice({
     removeSeries: (state, action: PayloadAction<string>) => {
       state.series = state.series.filter((s) => s.id !== action.payload);
     },
-    updateSettings: (state, action: PayloadAction<Partial<AppSettings>>) => {
-      Object.assign(state.settings, action.payload);
-    },
   },
 });
 
@@ -183,6 +199,8 @@ export const {
   hydrateTags,
   addLibrary,
   removeLibrary,
+  upsertLibrary,
+  setLibraryData,
   addMediaFromScan,
   updateMedia,
   removeMedia,
@@ -196,7 +214,6 @@ export const {
   addSeriesMembers,
   removeSeriesMember,
   removeSeries,
-  updateSettings,
 } = dataSlice.actions;
 
 export default dataSlice.reducer;

@@ -7,120 +7,119 @@ import {
   DialogSurface,
   DialogTitle,
   Field,
-  Input,
   Switch,
   Text,
-  makeStyles,
-  tokens,
 } from '@fluentui/react-components';
-import { Folder20Regular } from '@fluentui/react-icons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { updateSettings } from '../store/dataSlice';
-import { setSettingsOpen } from '../store/uiSlice';
-
-const useStyles = makeStyles({
-  row: {
-    display: 'flex',
-    gap: tokens.spacingHorizontalS,
-  },
-  playerInput: {
-    flex: 1,
-  },
-});
+import { hydrate } from '../store/dataSlice';
+import { setOnlyNSFW, setRememberNSFW, setSettingsOpen, setShowNSFW } from '../store/uiSlice';
 
 export function SettingsDialog() {
   const dispatch = useAppDispatch();
   const open = useAppSelector((s) => s.ui.settingsOpen);
-  const playerPath = useAppSelector((s) => s.data.settings.playerPath);
-  const showFileExt = useAppSelector((s) => s.data.settings.showFileExt);
-  const styles = useStyles();
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
+  const onlyNSFW = useAppSelector((s) => s.ui.onlyNSFW);
+  const rememberNSFW = useAppSelector((s) => s.ui.rememberNSFW);
+  const [notice, setNotice] = useState('');
 
-  const [path, setPath] = useState('');
-  const [hint, setHint] = useState('');
-
-  useEffect(() => {
-    if (open) {
-      setPath(playerPath);
-      setHint('');
-    }
-  }, [open, playerPath]);
-
-  const browse = async () => {
-    const p = await window.electronAPI.pickPlayer();
-    if (p) setPath(p);
-  };
-
-  const detect = async () => {
-    const p = await window.electronAPI.detectPlayer();
-    if (p) {
-      setPath(p);
-      setHint(`已自动检测到播放器：${p}`);
+  const handleMigrateData = async () => {
+    const p = await window.electronAPI.pickFolder();
+    if (!p) return;
+    const res = await window.electronAPI.migrateData(p);
+    if (res.ok) {
+      const data = await window.electronAPI.loadData();
+      dispatch(hydrate(data));
+      setNotice(`数据文件已迁移到：${p}`);
     } else {
-      setHint('未检测到 PotPlayer，请手动选择播放器程序');
+      setNotice(`迁移失败：${res.error ?? '未知错误'}`);
     }
   };
 
-  const handleSave = () => {
-    dispatch(updateSettings({ playerPath: path.trim() }));
-    dispatch(setSettingsOpen(false));
+  const handleClearCache = async () => {
+    const res = await window.electronAPI.clearCache();
+    setNotice(res.ok ? '缩略图缓存已清除' : `清除失败：${res.error ?? '未知错误'}`);
   };
 
   return (
     <Dialog
       open={open}
       onOpenChange={(_, data) => {
-        if (!data.open) dispatch(setSettingsOpen(false));
+        if (!data.open) {
+          dispatch(setSettingsOpen(false));
+          setNotice('');
+        }
       }}
     >
       <DialogSurface>
         <DialogBody>
           <DialogTitle>设置</DialogTitle>
           <DialogContent>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Field
-                label="外部播放器（PotPlayer）"
-                hint="播放视频时将调用该程序，可点击「自动检测」或手动选择"
-              >
-                <div className={styles.row}>
-                  <Input
-                    className={styles.playerInput}
-                    value={path}
-                    placeholder="例如：C:\\Program Files\\DAUM\\PotPlayer\\PotPlayerMini64.exe"
-                    onChange={(_, d) => setPath(d.value)}
-                  />
-                  <Button icon={<Folder20Regular />} onClick={() => void browse()}>
-                    浏览
-                  </Button>
-                  <Button onClick={() => void detect()}>自动检测</Button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <Field label="限制内容">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text size={300}>显示 NSFW 内容</Text>
+                    <Switch
+                      checked={showNSFW}
+                      onChange={(_, data) => {
+                        dispatch(setShowNSFW(!!data.checked));
+                        if (!data.checked) dispatch(setOnlyNSFW(false));
+                      }}
+                      label="显示"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text size={300}>只显示 NSFW 内容</Text>
+                    <Switch
+                      checked={onlyNSFW}
+                      onChange={(_, data) => {
+                        if (data.checked) {
+                          dispatch(setShowNSFW(true));
+                          dispatch(setOnlyNSFW(true));
+                        } else {
+                          dispatch(setOnlyNSFW(false));
+                        }
+                      }}
+                      label="显示"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text size={300}>记住我的选择</Text>
+                    <Switch
+                      checked={rememberNSFW}
+                      onChange={(_, data) => dispatch(setRememberNSFW(!!data.checked))}
+                      label="显示"
+                    />
+                  </div>
                 </div>
               </Field>
-              {hint && (
-                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                  {hint}
+              <Field label="缓存管理">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text size={300}>全部软件数据</Text>
+                    <Button size="small" onClick={() => void handleMigrateData()}>
+                      迁移数据文件
+                    </Button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text size={300}>缩略图缓存</Text>
+                    <Button size="small" onClick={() => void handleClearCache()}>
+                      清除缓存文件
+                    </Button>
+                  </div>
+                </div>
+              </Field>
+              {notice && (
+                <Text size={200} style={{ color: '#107c10' }}>
+                  {notice}
                 </Text>
               )}
-              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                未配置播放器时，将使用系统默认程序打开媒体文件。
-              </Text>
-              <Field label="文件名显示" hint="默认隐藏文件扩展名（如 .jpg、.mp4），可在卡片和详情中保持整洁">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text size={300}>显示文件扩展名</Text>
-                  <Switch
-                    checked={showFileExt}
-                    onChange={(_, data) => dispatch(updateSettings({ showFileExt: !!data.checked }))}
-                    label="显示"
-                  />
-                </div>
-              </Field>
             </div>
           </DialogContent>
           <DialogActions>
-            <Button appearance="secondary" onClick={() => dispatch(setSettingsOpen(false))}>
-              取消
-            </Button>
-            <Button appearance="primary" onClick={handleSave}>
-              保存
+            <Button appearance="primary" onClick={() => dispatch(setSettingsOpen(false))}>
+              关闭
             </Button>
           </DialogActions>
         </DialogBody>

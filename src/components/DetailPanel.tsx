@@ -43,7 +43,7 @@ import {
   clearSeriesView,
   setView,
 } from '../store/uiSlice';
-import { displayName, mediaUrl, formatSize, formatDate } from '../services/format';
+import { displayName, previewUrl, formatSize, formatDate } from '../services/format';
 import {
   seriesCoverCandidates,
   seriesEffectiveRestricted,
@@ -231,7 +231,6 @@ function MediaDetail({ item }: { item: MediaItem }) {
   const dispatch = useAppDispatch();
   const tags = useAppSelector((s) => s.data.tags);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
-  const showFileExt = useAppSelector((s) => s.data.settings.showFileExt);
   const styles = useStyles();
 
   const [tagEditOpen, setTagEditOpen] = useState(false);
@@ -242,10 +241,10 @@ function MediaDetail({ item }: { item: MediaItem }) {
   const coverSrc =
     item.type === 'image'
       ? item.coverPath
-        ? mediaUrl(item.coverPath)
-        : mediaUrl(item.filePath)
+        ? previewUrl(item.coverPath)
+        : previewUrl(item.filePath)
       : item.coverPath
-      ? mediaUrl(item.coverPath)
+      ? previewUrl(item.coverPath)
       : null;
   const itemTags = item.tags
     .map((id) => tags.find((t) => t.id === id))
@@ -286,7 +285,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
 
       <div className={styles.cover}>
         {coverSrc ? (
-          <img className={styles.img} src={coverSrc} alt={item.fileName} draggable={false} />
+          <img className={styles.img} src={coverSrc} alt={item.fileName} draggable={false} decoding="async" />
         ) : (
           <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
             <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
@@ -299,7 +298,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
       <Field label="名称">
         <div className={styles.nameRow}>
           <Text className={styles.name} size={300} weight="semibold" title={item.fileName}>
-            {displayName(item.fileName, showFileExt)}
+            {displayName(item.fileName)}
           </Text>
           <Button
             icon={<Rename20Regular />}
@@ -396,7 +395,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
 
       <TagEditDialog
         open={tagEditOpen}
-        title={displayName(item.fileName, showFileExt)}
+        title={displayName(item.fileName)}
         tags={item.tags}
         restricted={item.restricted}
         onToggleTag={(tagId) =>
@@ -456,13 +455,13 @@ function SeriesDetail({ series }: { series: Series }) {
   const effectiveRestricted = seriesEffectiveRestricted(series, media);
 
   const firstCover = (() => {
-    if (series.coverPath) return mediaUrl(series.coverPath);
+    if (series.coverPath) return previewUrl(series.coverPath);
     const firstImage = members.find((m) => m.type === 'image');
     const firstVideoWithCover = members.find((m) => m.type === 'video' && m.coverPath);
     const m = firstImage ?? firstVideoWithCover;
     if (!m) return null;
-    if (m.type === 'image') return mediaUrl(m.coverPath ?? m.filePath);
-    return m.coverPath ? mediaUrl(m.coverPath) : null;
+    if (m.type === 'image') return previewUrl(m.coverPath ?? m.filePath);
+    return m.coverPath ? previewUrl(m.coverPath) : null;
   })();
 
   const itemTags = effectiveTags
@@ -580,9 +579,9 @@ function SeriesDetail({ series }: { series: Series }) {
         <div className={styles.memberList}>
           {members.map((m) => {
             const thumb = m.coverPath
-              ? mediaUrl(m.coverPath)
+              ? previewUrl(m.coverPath)
               : m.type === 'image'
-              ? mediaUrl(m.filePath)
+              ? previewUrl(m.filePath)
               : '';
             return (
               <div
@@ -591,14 +590,14 @@ function SeriesDetail({ series }: { series: Series }) {
                 onClick={() => dispatch(setSelectedMedia(m.id))}
               >
                 {thumb ? (
-                  <img className={styles.memberThumb} src={thumb} alt="" draggable={false} />
+                  <img className={styles.memberThumb} src={thumb} alt="" draggable={false} loading="lazy" decoding="async" />
                 ) : (
                   <div className={styles.memberThumb} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <VideoClip20Regular />
                   </div>
                 )}
                 <Text className={styles.memberName} size={200} title={m.fileName}>
-                  {m.fileName}
+                  {displayName(m.fileName)}
                 </Text>
                 <Button
                   icon={<Dismiss20Regular />}
@@ -641,12 +640,13 @@ function SeriesDetail({ series }: { series: Series }) {
                         dispatch(updateSeries({ id: series.id, patch: { coverPath } }))
                       }
                     >
-                      <img className={styles.coverCandidateThumb} src={mediaUrl(coverPath)} alt="" draggable={false} />
+                      <img className={styles.coverCandidateThumb} src={previewUrl(coverPath)} alt="" draggable={false} loading="lazy" decoding="async" />
                       <Text
                         size={200}
                         style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={member.fileName}
                       >
-                        {member.fileName}
+                        {displayName(member.fileName)}
                       </Text>
                     </div>
                   ))}

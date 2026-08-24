@@ -1,9 +1,9 @@
 import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
-import { ArrowLeft20Regular, Home20Regular, Tag20Regular } from '@fluentui/react-icons';
+import { Home20Regular, Tag20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { clearSeriesView, setSelectedCategory, setSelectionMode, setTagFilter, setView } from '../store/uiSlice';
-import { mediaUrl } from '../services/format';
-import { memberIdSet, seriesEffectiveTags } from '../services/series';
+import { clearSeriesView, setSelectedCategory, setSelectedMedia, setSelectionMode, setTagFilter, setView } from '../store/uiSlice';
+import { previewUrl } from '../services/format';
+import { memberIdSet, seriesEffectiveRestricted, seriesEffectiveTags } from '../services/series';
 import { visibleTags } from '../services/tags';
 import type { Tag } from '../types';
 
@@ -104,6 +104,7 @@ export function TagBrowser() {
   const selectedCategory = useAppSelector((s) => s.ui.selectedCategory);
   const selectedLibraryId = useAppSelector((s) => s.ui.selectedLibraryId);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
+  const onlyNSFW = useAppSelector((s) => s.ui.onlyNSFW);
   const categories = useAppSelector((s) => s.data.categories);
   const tags = useAppSelector((s) => s.data.tags);
   const media = useAppSelector((s) => s.data.media);
@@ -112,10 +113,16 @@ export function TagBrowser() {
 
   const scopedMedia = media.filter(
     (m) =>
-      !memberIdSet(series).has(m.id) && (!selectedLibraryId || m.libraryId === selectedLibraryId)
+      !memberIdSet(series).has(m.id) &&
+      (!selectedLibraryId || m.libraryId === selectedLibraryId) &&
+      (!onlyNSFW || m.restricted)
   );
-  const scopedSeries = series.filter((s) => !selectedLibraryId || s.libraryId === selectedLibraryId);
-  const scopedTags = visibleTags(tags, showNSFW);
+  const scopedSeries = series.filter(
+    (s) =>
+      (!selectedLibraryId || s.libraryId === selectedLibraryId) &&
+      (!onlyNSFW || seriesEffectiveRestricted(s, media))
+  );
+  const scopedTags = visibleTags(tags, showNSFW, onlyNSFW);
   const tagIdToCategory = new Map<string, string>();
   scopedTags.forEach((t) => tagIdToCategory.set(t.id, t.category));
 
@@ -133,19 +140,11 @@ export function TagBrowser() {
   };
 
   const goHome = () => {
-    dispatch(setSelectedCategory(null));
+    dispatch(setSelectedMedia(null));
     dispatch(setTagFilter([]));
     dispatch(clearSeriesView());
     dispatch(setSelectionMode(false));
     dispatch(setView('media'));
-  };
-
-  const goUp = () => {
-    if (selectedCategory) {
-      dispatch(setSelectedCategory(null));
-    } else {
-      goHome();
-    }
   };
 
   const renderTagCard = (tag: Tag) => {
@@ -154,7 +153,7 @@ export function TagBrowser() {
       <div key={tag.id} className={styles.card} onClick={() => handleSelectTag(tag)} title={tag.name}>
         <div className={styles.cover} style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
           {tag.coverPath ? (
-            <img className={styles.img} src={mediaUrl(tag.coverPath)} alt={tag.name} draggable={false} />
+            <img className={styles.img} src={previewUrl(tag.coverPath)} alt={tag.name} draggable={false} loading="lazy" decoding="async" />
           ) : (
             <Tag20Regular style={{ width: 48, height: 48 }} />
           )}
@@ -208,7 +207,7 @@ export function TagBrowser() {
                 >
                   <div className={styles.cover} style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}>
                     {coverTag?.coverPath ? (
-                      <img className={styles.img} src={mediaUrl(coverTag.coverPath)} alt={cat} draggable={false} />
+                      <img className={styles.img} src={previewUrl(coverTag.coverPath)} alt={cat} draggable={false} loading="lazy" decoding="async" />
                     ) : (
                       <Tag20Regular style={{ width: 48, height: 48 }} />
                     )}
@@ -235,9 +234,6 @@ export function TagBrowser() {
   return (
     <div className={styles.root}>
       <div className={styles.topBar}>
-        <Button appearance="outline" icon={<ArrowLeft20Regular />} onClick={goUp}>
-          返回上级
-        </Button>
         <Button appearance="subtle" icon={<Home20Regular />} onClick={goHome}>
           回到主页
         </Button>

@@ -7,9 +7,11 @@ import { DetailPanel } from './components/DetailPanel';
 import { LibraryDialog } from './components/LibraryDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TagManagerPage } from './components/TagManagerPage';
-import { useAppDispatch } from './store/hooks';
+import { useAppDispatch, useAppSelector } from './store/hooks';
 import { hydrate, hydrateTags } from './store/dataSlice';
-import { setHydrated, setSelectedLibrary } from './store/uiSlice';
+import { setHydrated, setSelectedLibrary, setShowNSFW, setOnlyNSFW, setRememberNSFW } from './store/uiSlice';
+
+const NSFW_STORAGE_KEY = 'nsfw-display-settings';
 
 const useStyles = makeStyles({
   app: {
@@ -28,8 +30,37 @@ const useStyles = makeStyles({
 export default function App() {
   const dispatch = useAppDispatch();
   const styles = useStyles();
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
+  const onlyNSFW = useAppSelector((s) => s.ui.onlyNSFW);
+  const rememberNSFW = useAppSelector((s) => s.ui.rememberNSFW);
 
   const isTagManager = new URLSearchParams(window.location.search).get('page') === 'tagmanager';
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(NSFW_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        showNSFW?: boolean;
+        onlyNSFW?: boolean;
+        rememberNSFW?: boolean;
+      };
+      dispatch(setRememberNSFW(!!saved.rememberNSFW));
+      if (saved.rememberNSFW) {
+        dispatch(setShowNSFW(!!saved.showNSFW));
+        dispatch(setOnlyNSFW(!!saved.onlyNSFW));
+      } else {
+        dispatch(setShowNSFW(false));
+        dispatch(setOnlyNSFW(false));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    localStorage.setItem(NSFW_STORAGE_KEY, JSON.stringify({ showNSFW, onlyNSFW, rememberNSFW }));
+  }, [showNSFW, onlyNSFW, rememberNSFW]);
 
   useEffect(() => {
     if (!window.electronAPI) return;

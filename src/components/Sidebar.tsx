@@ -8,7 +8,6 @@ import {
   DialogSurface,
   DialogTitle,
   Divider,
-  Switch,
   Text,
   Tooltip,
   makeStyles,
@@ -28,7 +27,6 @@ import {
   setLibraryDialogOpen,
   setSelectedLibrary,
   setSelectedCategory,
-  setShowNSFW,
   setView,
 } from '../store/uiSlice';
 import { store } from '../store';
@@ -65,7 +63,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalXS,
-    marginTop: tokens.spacingVerticalM,
+    marginTop: 0,
     padding: `0 ${tokens.spacingHorizontalS}`,
   },
   item: {
@@ -92,16 +90,6 @@ const useStyles = makeStyles({
   count: {
     flexShrink: 0,
   },
-  gateRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-  },
-  notice: {
-    color: tokens.colorPaletteRedForeground1,
-    padding: `0 ${tokens.spacingHorizontalS}`,
-  },
 });
 
 export function Sidebar() {
@@ -110,14 +98,12 @@ export function Sidebar() {
   const media = useAppSelector((s) => s.data.media);
   const series = useAppSelector((s) => s.data.series);
   const selectedLibraryId = useAppSelector((s) => s.ui.selectedLibraryId);
-  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const view = useAppSelector((s) => s.ui.view);
   const selectedCategory = useAppSelector((s) => s.ui.selectedCategory);
   const categories = useAppSelector((s) => s.data.categories);
 
   const styles = useStyles();
   const [removeTarget, setRemoveTarget] = useState<Library | null>(null);
-  const [notice, setNotice] = useState('');
 
   const hiddenMembers = memberIdSet(series);
 
@@ -132,16 +118,12 @@ export function Sidebar() {
     dispatch(addMediaFromScan({ libraryId: libId, files }));
   };
 
-  const handleConfirmRemove = async () => {
+  const handleConfirmRemove = () => {
     if (!removeTarget) return;
     const lib = removeTarget;
     setRemoveTarget(null);
-    const res = await window.electronAPI.removeFolder(lib.path);
     dispatch(removeLibrary(lib.id));
     if (selectedLibraryId === lib.id) dispatch(setSelectedLibrary(null));
-    setNotice(
-      res.ok ? `已删除库「${lib.name}」及其文件夹` : `删除文件夹失败：${res.error ?? '未知错误'}`
-    );
   };
 
   return (
@@ -172,11 +154,20 @@ export function Sidebar() {
         </Text>
       )}
 
-      <Divider />
+      <Divider style={{ flex: '0 0 auto' }} />
 
       <div className={styles.sectionTitle}>
         <Folder20Regular />
         <Text weight="semibold">库</Text>
+        <div style={{ flex: 1 }} />
+        <Button
+          icon={<Add20Regular />}
+          appearance="subtle"
+          size="small"
+          onClick={() => dispatch(setLibraryDialogOpen(true))}
+        >
+          添加库
+        </Button>
       </div>
 
       <div
@@ -216,7 +207,7 @@ export function Sidebar() {
               }}
             />
           </Tooltip>
-          <Tooltip content="删除库（同时删除文件夹及其中的文件）" relationship="label">
+          <Tooltip content="删除库（不删除本地文件）" relationship="label">
             <Button
               icon={<Delete20Regular />}
               size="small"
@@ -230,32 +221,6 @@ export function Sidebar() {
         </div>
       ))}
 
-      <Button
-        icon={<Add20Regular />}
-        appearance="subtle"
-        size="small"
-        onClick={() => dispatch(setLibraryDialogOpen(true))}
-      >
-        添加库
-      </Button>
-
-      <Divider />
-
-      <div className={styles.sectionTitle}>
-        <Text weight="semibold">限制内容</Text>
-      </div>
-
-      <div className={styles.gateRow}>
-        <Text size={300}>NSFW 内容</Text>
-        <Switch checked={showNSFW} onChange={(_, data) => dispatch(setShowNSFW(data.checked))} label="显示" />
-      </div>
-
-      {notice && (
-        <Text size={200} className={styles.notice}>
-          {notice}
-        </Text>
-      )}
-
       <Dialog
         open={removeTarget !== null}
         onOpenChange={(_, data) => {
@@ -266,12 +231,12 @@ export function Sidebar() {
           <DialogBody>
             <DialogTitle>删除库</DialogTitle>
             <DialogContent>
-              <Text size={300}>确定要删除库「{removeTarget?.name}」吗？</Text>
+              <Text size={300}>确定要从应用中移除库「{removeTarget?.name}」吗？</Text>
               <Text
                 size={300}
-                style={{ display: 'block', marginTop: 8, color: tokens.colorPaletteRedForeground1 }}
+                style={{ display: 'block', marginTop: 8, color: tokens.colorNeutralForeground3 }}
               >
-                该库对应的文件夹及其中的所有文件将被永久删除，无法恢复！
+                仅从应用移除该库，不会删除本地文件夹及其中的文件。
               </Text>
               <Text size={200} style={{ display: 'block', marginTop: 4, color: tokens.colorNeutralForeground3 }}>
                 {removeTarget?.path}
@@ -281,8 +246,8 @@ export function Sidebar() {
               <Button appearance="secondary" onClick={() => setRemoveTarget(null)}>
                 取消
               </Button>
-              <Button appearance="primary" icon={<Delete20Regular />} onClick={() => void handleConfirmRemove()}>
-                确认删除
+              <Button appearance="primary" icon={<Delete20Regular />} onClick={handleConfirmRemove}>
+                确认移除
               </Button>
             </DialogActions>
           </DialogBody>

@@ -12,7 +12,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { mediaUrl } from '../services/format';
+import { previewUrl } from '../services/format';
 
 interface Props {
   open: boolean;
@@ -114,7 +114,7 @@ export function CropImageDialog({ open, imagePath, aspectRatio, onClose, onSaved
       setError('');
     };
     img.onerror = () => setError('无法加载图片，请重试');
-    img.src = mediaUrl(imagePath);
+    img.src = previewUrl(imagePath);
   }, [open, imagePath]);
 
   useEffect(() => {
@@ -220,7 +220,7 @@ export function CropImageDialog({ open, imagePath, aspectRatio, onClose, onSaved
                 <img
                   ref={imgRef}
                   className={styles.img}
-                  src={mediaUrl(imagePath)}
+                  src={previewUrl(imagePath)}
                   alt=""
                   draggable={false}
                   style={{

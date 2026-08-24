@@ -1,4 +1,11 @@
-import type { AppData, ScanResult, Tag } from './types';
+import type { AppData, MediaItem, ScanResult, Series, Tag } from './types';
+
+interface AdoptedLibrary {
+  libraryId: string | null;
+  libraryName: string | null;
+  media: MediaItem[];
+  series: Series[];
+}
 
 declare global {
   interface Window {
@@ -12,13 +19,10 @@ declare global {
       pickFolder: () => Promise<string | null>;
       pickFiles: () => Promise<string[]>;
       pickImage: () => Promise<string | null>;
-      pickPlayer: () => Promise<string | null>;
-      detectPlayer: () => Promise<string | null>;
       scanLibrary: (folder: string) => Promise<ScanResult[]>;
+      adoptLibrary: (folder: string) => Promise<AdoptedLibrary | null>;
       ensureFolder: (folder: string) => Promise<{ ok: boolean; error?: string }>;
-      removeFolder: (folder: string) => Promise<{ ok: boolean; error?: string }>;
       importFiles: (sources: string[], targetFolder: string) => Promise<string[]>;
-      openWithPlayer: (playerPath: string, filePath: string) => Promise<{ ok: boolean; error?: string }>;
       openWithSystem: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
       renameFile: (
         filePath: string,
@@ -30,6 +34,8 @@ declare global {
         baseName: string
       ) => Promise<{ ok: boolean; filePath?: string; error?: string }>;
       saveCrop: (dataUrl: string) => Promise<{ ok: boolean; filePath?: string; error?: string }>;
+      migrateData: (targetDir: string) => Promise<{ ok: boolean; error?: string }>;
+      clearCache: () => Promise<{ ok: boolean; error?: string }>;
     };
   }
 }

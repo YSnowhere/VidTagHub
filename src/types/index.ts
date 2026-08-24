@@ -41,18 +41,12 @@ export interface Series {
   memberIds: string[];
 }
 
-export interface AppSettings {
-  playerPath: string;
-  showFileExt: boolean;
-}
-
 export interface AppData {
   libraries: Library[];
   categories: string[];
   tags: Tag[];
   media: MediaItem[];
   series: Series[];
-  settings: AppSettings;
 }
 
 export interface ScanResult {
@@ -69,5 +63,4 @@ export const DEFAULT_DATA: AppData = {
   tags: [],
   media: [],
   series: [],
-  settings: { playerPath: '', showFileExt: false },
 };

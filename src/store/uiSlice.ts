@@ -14,6 +14,8 @@ interface UiState {
   libraryDialogOpen: boolean;
   settingsOpen: boolean;
   showNSFW: boolean;
+  onlyNSFW: boolean;
+  rememberNSFW: boolean;
   searchFields: Record<'name' | 'tags' | 'description', boolean>;
   searchMode: 'and' | 'or';
   searchSubEpisodes: boolean;
@@ -35,6 +37,8 @@ const initialState: UiState = {
   libraryDialogOpen: false,
   settingsOpen: false,
   showNSFW: false,
+  onlyNSFW: false,
+  rememberNSFW: false,
   searchFields: { name: true, tags: true, description: true },
   searchMode: 'and',
   searchSubEpisodes: false,
@@ -106,6 +110,12 @@ const uiSlice = createSlice({
     setShowNSFW: (state, action: PayloadAction<boolean>) => {
       state.showNSFW = action.payload;
     },
+    setOnlyNSFW: (state, action: PayloadAction<boolean>) => {
+      state.onlyNSFW = action.payload;
+    },
+    setRememberNSFW: (state, action: PayloadAction<boolean>) => {
+      state.rememberNSFW = action.payload;
+    },
     setSearchField: (
       state,
       action: PayloadAction<{ field: keyof UiState['searchFields']; value: boolean }>
@@ -154,6 +164,8 @@ export const {
   setLibraryDialogOpen,
   setSettingsOpen,
   setShowNSFW,
+  setOnlyNSFW,
+  setRememberNSFW,
   setSearchField,
   setSearchMode,
   setSearchSubEpisodes,

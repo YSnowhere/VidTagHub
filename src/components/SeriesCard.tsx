@@ -2,7 +2,7 @@ import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-compone
 import { Collections20Regular, Open20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedSeries, setSeriesView, setView } from '../store/uiSlice';
-import { mediaUrl } from '../services/format';
+import { previewUrl } from '../services/format';
 import { seriesEffectiveTags, seriesTypeText } from '../services/series';
 import { visibleTags } from '../services/tags';
 import type { Series, Tag } from '../types';
@@ -118,7 +118,7 @@ export function SeriesCard({ series }: Props) {
     >
       <div className={styles.cover}>
         {series.coverPath ? (
-          <img className={styles.img} src={mediaUrl(series.coverPath)} alt={series.title} draggable={false} />
+          <img className={styles.img} src={previewUrl(series.coverPath)} alt={series.title} draggable={false} loading="lazy" decoding="async" />
         ) : (
           <div className={styles.placeholder}>
             <Collections20Regular />

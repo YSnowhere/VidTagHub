@@ -10,6 +10,11 @@ const dataSlice = createSlice({
     hydrate: (state, action: PayloadAction<AppData>) => ({
       ...DEFAULT_DATA,
       ...action.payload,
+      libraries: (action.payload.libraries ?? []).map((l) => ({
+        ...l,
+        nsfw: l.nsfw ?? false,
+        collapsed: l.collapsed ?? false,
+      })),
       categories: action.payload.categories?.length ? action.payload.categories : DEFAULT_DATA.categories,
       tags: (action.payload.tags ?? []).map((t) => ({ ...t, restricted: t.restricted ?? false })),
       media: action.payload.media.map((m) => ({ ...m, restricted: m.restricted ?? false })),
@@ -33,7 +38,13 @@ const dataSlice = createSlice({
         state.libraries.push(action.payload);
       },
       prepare: (payload: { name: string; path: string }) => ({
-        payload: { id: nanoid(), name: payload.name, path: payload.path },
+        payload: {
+          id: nanoid(),
+          name: payload.name,
+          path: payload.path,
+          nsfw: false,
+          collapsed: false,
+        },
       }),
     },
     removeLibrary: (state, action: PayloadAction<string>) => {
@@ -48,8 +59,10 @@ const dataSlice = createSlice({
       if (existing) {
         existing.name = lib.name;
         existing.path = lib.path;
+        existing.nsfw = lib.nsfw ?? false;
+        existing.collapsed = lib.collapsed ?? false;
       } else {
-        state.libraries.push(lib);
+        state.libraries.push({ ...lib, nsfw: lib.nsfw ?? false, collapsed: lib.collapsed ?? false });
       }
     },
     setLibraryData: (

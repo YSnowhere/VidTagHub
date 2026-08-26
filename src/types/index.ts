@@ -4,6 +4,8 @@ export interface Library {
   id: string;
   name: string;
   path: string;
+  nsfw?: boolean;
+  collapsed?: boolean;
 }
 
 export interface Tag {

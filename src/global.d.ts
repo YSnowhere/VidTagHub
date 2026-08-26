@@ -23,6 +23,8 @@ declare global {
       adoptLibrary: (folder: string) => Promise<AdoptedLibrary | null>;
       ensureFolder: (folder: string) => Promise<{ ok: boolean; error?: string }>;
       importFiles: (sources: string[], targetFolder: string) => Promise<string[]>;
+      deleteFile: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
+      deleteLibraryData: (libraryId: string) => Promise<{ ok: boolean; error?: string }>;
       openWithSystem: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
       renameFile: (
         filePath: string,

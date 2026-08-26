@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ensureFolder: (folder: string) => ipcRenderer.invoke('folder:ensure', folder),
   importFiles: (sources: string[], targetFolder: string) =>
     ipcRenderer.invoke('file:importFiles', sources, targetFolder),
+  deleteFile: (filePath: string) => ipcRenderer.invoke('file:delete', filePath),
+  deleteLibraryData: (libraryId: string) => ipcRenderer.invoke('library:deleteData', libraryId),
   openWithSystem: (filePath: string) => ipcRenderer.invoke('shell:openPath', filePath),
   renameFile: (filePath: string, newName: string) => ipcRenderer.invoke('file:rename', filePath, newName),
   saveFrame: (dataUrl: string, folder: string, baseName: string) =>

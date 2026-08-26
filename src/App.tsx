@@ -10,6 +10,7 @@ import { TagManagerPage } from './components/TagManagerPage';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import { hydrate, hydrateTags } from './store/dataSlice';
 import { setHydrated, setSelectedLibrary, setShowNSFW, setOnlyNSFW, setRememberNSFW } from './store/uiSlice';
+import { store } from './store';
 
 const NSFW_STORAGE_KEY = 'nsfw-display-settings';
 
@@ -61,6 +62,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(NSFW_STORAGE_KEY, JSON.stringify({ showNSFW, onlyNSFW, rememberNSFW }));
   }, [showNSFW, onlyNSFW, rememberNSFW]);
+
+  useEffect(() => {
+    const state = store.getState();
+    if (!state.ui.showNSFW) {
+      const lib = state.data.libraries.find((l) => l.id === state.ui.selectedLibraryId);
+      if (lib?.nsfw) dispatch(setSelectedLibrary(null));
+    }
+  }, [showNSFW, dispatch]);
 
   useEffect(() => {
     if (!window.electronAPI) return;

@@ -15,24 +15,22 @@ import {
 } from '@fluentui/react-components';
 import {
   Add20Regular,
-  ArrowClockwise20Regular,
   Delete20Regular,
   Folder20Regular,
-  Rename20Regular,
+  Settings20Regular,
   Tag20Regular,
 } from '@fluentui/react-icons';
 import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { addMediaFromScan, removeLibrary, upsertLibrary } from '../store/dataSlice';
+import { removeLibrary } from '../store/dataSlice';
 import {
   setLibraryDialogOpen,
   setSelectedLibrary,
   setSelectedCategory,
   setView,
 } from '../store/uiSlice';
-import { store } from '../store';
 import { memberIdSet } from '../services/series';
-import { RenameLibraryDialog } from './RenameLibraryDialog';
+import { EditLibraryDialog } from './EditLibraryDialog';
 import type { Library } from '../types';
 
 const useStyles = makeStyles({
@@ -103,23 +101,23 @@ export function Sidebar() {
   const view = useAppSelector((s) => s.ui.view);
   const selectedCategory = useAppSelector((s) => s.ui.selectedCategory);
   const categories = useAppSelector((s) => s.data.categories);
+  const showNSFW = useAppSelector((s) => s.ui.showNSFW);
 
   const styles = useStyles();
   const [removeTarget, setRemoveTarget] = useState<Library | null>(null);
-  const [renameTarget, setRenameTarget] = useState<Library | null>(null);
+  const [editTarget, setEditTarget] = useState<Library | null>(null);
 
   const hiddenMembers = memberIdSet(series);
+
+  const aggregateHiddenIds = new Set(
+    libraries
+      .filter((l) => (!showNSFW && l.nsfw) || l.collapsed)
+      .map((l) => l.id)
+  );
 
   const countForLibrary = (libId: string) =>
     media.filter((m) => m.libraryId === libId && !hiddenMembers.has(m.id)).length +
     series.filter((s) => s.libraryId === libId).length;
-
-  const handleRescan = async (libId: string) => {
-    const lib = store.getState().data.libraries.find((l) => l.id === libId);
-    if (!lib || !window.electronAPI) return;
-    const files = await window.electronAPI.scanLibrary(lib.path);
-    dispatch(addMediaFromScan({ libraryId: libId, files }));
-  };
 
   const handleConfirmRemove = () => {
     if (!removeTarget) return;
@@ -182,58 +180,61 @@ export function Sidebar() {
           <Text size={300}>全部</Text>
         </span>
         <Badge className={styles.count} size="small" appearance="tint">
-          {media.filter((m) => !hiddenMembers.has(m.id)).length + series.length}
+          {media.filter((m) => !hiddenMembers.has(m.id) && !aggregateHiddenIds.has(m.libraryId)).length +
+            series.filter((s) => !aggregateHiddenIds.has(s.libraryId)).length}
         </Badge>
       </div>
 
-      {libraries.map((lib) => (
-        <div
-          key={lib.id}
-          className={`${styles.item} ${selectedLibraryId === lib.id ? styles.itemSelected : ''}`}
-          onClick={() => dispatch(setSelectedLibrary(lib.id))}
-        >
-          <Folder20Regular />
-          <span className={styles.name} title={lib.path}>
-            <Text size={300}>{lib.name}</Text>
-          </span>
-          <Badge className={styles.count} size="small" appearance="tint">
-            {countForLibrary(lib.id)}
-          </Badge>
-          <Tooltip content="重新扫描" relationship="label">
-            <Button
-              icon={<ArrowClockwise20Regular />}
-              size="small"
-              appearance="subtle"
-              onClick={(e) => {
-                e.stopPropagation();
-                void handleRescan(lib.id);
-              }}
-            />
-          </Tooltip>
-          <Tooltip content="重命名库" relationship="label">
-            <Button
-              icon={<Rename20Regular />}
-              size="small"
-              appearance="subtle"
-              onClick={(e) => {
-                e.stopPropagation();
-                setRenameTarget(lib);
-              }}
-            />
-          </Tooltip>
-          <Tooltip content="删除库（不删除本地文件）" relationship="label">
-            <Button
-              icon={<Delete20Regular />}
-              size="small"
-              appearance="subtle"
-              onClick={(e) => {
-                e.stopPropagation();
-                setRemoveTarget(lib);
-              }}
-            />
-          </Tooltip>
-        </div>
-      ))}
+      {libraries.map((lib) => {
+        if (!showNSFW && lib.nsfw) return null;
+        return (
+          <div
+            key={lib.id}
+            className={`${styles.item} ${selectedLibraryId === lib.id ? styles.itemSelected : ''}`}
+            onClick={() => dispatch(setSelectedLibrary(lib.id))}
+          >
+            <Folder20Regular />
+            <span className={styles.name} title={lib.path}>
+              <Text size={300}>{lib.name}</Text>
+            </span>
+            {!!lib.nsfw && (
+              <Badge size="small" appearance="tint" color="danger">
+                NSFW
+              </Badge>
+            )}
+            {!!lib.collapsed && (
+              <Badge size="small" appearance="outline">
+                折叠
+              </Badge>
+            )}
+            <Badge className={styles.count} size="small" appearance="tint">
+              {countForLibrary(lib.id)}
+            </Badge>
+            <Tooltip content="修改库（名称、重扫描、NSFW、折叠）" relationship="label">
+              <Button
+                icon={<Settings20Regular />}
+                size="small"
+                appearance="subtle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditTarget(lib);
+                }}
+              />
+            </Tooltip>
+            <Tooltip content="删除库（不删除本地文件）" relationship="label">
+              <Button
+                icon={<Delete20Regular />}
+                size="small"
+                appearance="subtle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRemoveTarget(lib);
+                }}
+              />
+            </Tooltip>
+          </div>
+        );
+      })}
 
       <Dialog
         open={removeTarget !== null}
@@ -268,16 +269,10 @@ export function Sidebar() {
         </DialogSurface>
       </Dialog>
 
-      <RenameLibraryDialog
-        open={renameTarget !== null}
-        currentName={renameTarget?.name ?? ''}
-        onClose={() => setRenameTarget(null)}
-        onConfirm={(name) => {
-          if (renameTarget) {
-            dispatch(upsertLibrary({ id: renameTarget.id, name, path: renameTarget.path }));
-            setRenameTarget(null);
-          }
-        }}
+      <EditLibraryDialog
+        open={editTarget !== null}
+        libraryId={editTarget?.id ?? null}
+        onClose={() => setEditTarget(null)}
       />
     </div>
   );

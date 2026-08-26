@@ -1,6 +1,12 @@
 import {
   Badge,
   Button,
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
   Divider,
   Field,
   Popover,
@@ -237,6 +243,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [frameCaptureOpen, setFrameCaptureOpen] = useState(false);
   const [cropTarget, setCropTarget] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const coverSrc =
     item.type === 'image'
@@ -258,6 +265,8 @@ function MediaDetail({ item }: { item: MediaItem }) {
   };
 
   const handleRemove = () => {
+    setDeleteOpen(false);
+    void window.electronAPI.deleteFile(item.filePath);
     dispatch(removeMedia(item.id));
     dispatch(setSelectedMedia(null));
   };
@@ -341,8 +350,8 @@ function MediaDetail({ item }: { item: MediaItem }) {
         >
           {item.type === 'video' ? '播放' : item.type === 'pdf' ? '打开' : '查看'}
         </Button>
-        <Button icon={<Delete20Regular />} onClick={handleRemove}>
-          从库移除
+        <Button icon={<Delete20Regular />} onClick={() => setDeleteOpen(true)}>
+          彻底删除
         </Button>
       </div>
 
@@ -433,6 +442,36 @@ function MediaDetail({ item }: { item: MediaItem }) {
           }}
         />
       )}
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(_, data) => {
+          if (!data.open) setDeleteOpen(false);
+        }}
+      >
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>彻底删除</DialogTitle>
+            <DialogContent>
+              <Text size={300}>确定要彻底删除「{displayName(item.fileName)}」吗？</Text>
+              <Text size={200} style={{ display: 'block', marginTop: 8, color: tokens.colorPaletteRedForeground1 }}>
+                该文件将从磁盘上永久删除，无法恢复。
+              </Text>
+              <Text size={200} style={{ display: 'block', marginTop: 4, color: tokens.colorNeutralForeground3 }}>
+                {item.filePath}
+              </Text>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setDeleteOpen(false)}>
+                取消
+              </Button>
+              <Button appearance="primary" icon={<Delete20Regular />} onClick={handleRemove}>
+                彻底删除
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
   );
 }

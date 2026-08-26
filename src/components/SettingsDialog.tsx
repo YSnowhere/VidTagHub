@@ -89,7 +89,7 @@ export function SettingsDialog() {
                     <Switch
                       checked={rememberNSFW}
                       onChange={(_, data) => dispatch(setRememberNSFW(!!data.checked))}
-                      label="显示"
+                      label="确定"
                     />
                   </div>
                 </div>

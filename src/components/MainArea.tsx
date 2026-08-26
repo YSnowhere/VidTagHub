@@ -89,6 +89,15 @@ function MediaGrid() {
 
   const viewingSeries = seriesViewId ? series.find((s) => s.id === seriesViewId) ?? null : null;
 
+  const hiddenLibraryIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const lib of libraries) {
+      if (!showNSFW && lib.nsfw) ids.add(lib.id);
+      if (selectedLibraryId === null && lib.collapsed) ids.add(lib.id);
+    }
+    return ids;
+  }, [libraries, showNSFW, selectedLibraryId]);
+
   const [titleDialog, setTitleDialog] = useState(false);
 
   const goHome = () => {
@@ -130,6 +139,7 @@ function MediaGrid() {
 
     const matchMedia = (m: MediaItem): boolean => {
       if (hiddenMembers.has(m.id)) return false;
+      if (hiddenLibraryIds.has(m.libraryId)) return false;
       if (selectedLibraryId && m.libraryId !== selectedLibraryId) return false;
       if (!showNSFW && m.restricted) return false;
       if (onlyNSFW && !m.restricted) return false;
@@ -143,6 +153,7 @@ function MediaGrid() {
     };
 
     const matchSeries = (s: Series): boolean => {
+      if (hiddenLibraryIds.has(s.libraryId)) return false;
       if (selectedLibraryId && s.libraryId !== selectedLibraryId) return false;
       if (!showNSFW && seriesEffectiveRestricted(s, media)) return false;
       if (onlyNSFW && !seriesEffectiveRestricted(s, media)) return false;
@@ -208,19 +219,20 @@ function MediaGrid() {
     searchMode,
     searchSubEpisodes,
     viewingSeries,
+    hiddenLibraryIds,
   ]);
 
   const selectedTagNames = tagFilter.map((id) => tags.find((t) => t.id === id)?.name ?? id);
   const nsfwCount = useMemo(() => {
     const hiddenMembers = memberIdSet(series);
-    let m = media.filter((x) => !hiddenMembers.has(x.id));
-    let s = series;
+    let m = media.filter((x) => !hiddenMembers.has(x.id) && !hiddenLibraryIds.has(x.libraryId));
+    let s = series.filter((x) => !hiddenLibraryIds.has(x.libraryId));
     if (selectedLibraryId) {
       m = m.filter((x) => x.libraryId === selectedLibraryId);
       s = s.filter((x) => x.libraryId === selectedLibraryId);
     }
     return m.filter((x) => x.restricted).length + s.filter((x) => x.restricted).length;
-  }, [media, series, selectedLibraryId]);
+  }, [media, series, selectedLibraryId, hiddenLibraryIds]);
 
   const targetSeries = seriesTarget ? series.find((s) => s.id === seriesTarget) : null;
 

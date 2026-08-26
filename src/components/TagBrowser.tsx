@@ -109,16 +109,25 @@ export function TagBrowser() {
   const tags = useAppSelector((s) => s.data.tags);
   const media = useAppSelector((s) => s.data.media);
   const series = useAppSelector((s) => s.data.series);
+  const libraries = useAppSelector((s) => s.data.libraries);
   const styles = useStyles();
+
+  const hiddenLibraryIds = new Set(
+    libraries
+      .filter((l) => (!showNSFW && l.nsfw) || (!selectedLibraryId && l.collapsed))
+      .map((l) => l.id)
+  );
 
   const scopedMedia = media.filter(
     (m) =>
       !memberIdSet(series).has(m.id) &&
+      !hiddenLibraryIds.has(m.libraryId) &&
       (!selectedLibraryId || m.libraryId === selectedLibraryId) &&
       (!onlyNSFW || m.restricted)
   );
   const scopedSeries = series.filter(
     (s) =>
+      !hiddenLibraryIds.has(s.libraryId) &&
       (!selectedLibraryId || s.libraryId === selectedLibraryId) &&
       (!onlyNSFW || seriesEffectiveRestricted(s, media))
   );

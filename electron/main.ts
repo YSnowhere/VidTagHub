@@ -10,6 +10,8 @@ interface Library {
   id: string;
   name: string;
   path: string;
+  nsfw?: boolean;
+  collapsed?: boolean;
 }
 
 interface Tag {
@@ -246,7 +248,13 @@ function loadData(): AppData {
 
 function saveData(data: AppData): void {
   const global: GlobalData = {
-    libraries: data.libraries.map((l) => ({ id: l.id, name: l.name, path: l.path })),
+    libraries: data.libraries.map((l) => ({
+      id: l.id,
+      name: l.name,
+      path: l.path,
+      nsfw: l.nsfw,
+      collapsed: l.collapsed,
+    })),
   };
   saveGlobal(global);
 
@@ -529,7 +537,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('file:importFiles', (_event, sources: string[], targetFolder: string) => {
-    const copied: string[] = [];
+    const moved: string[] = [];
     for (const src of sources) {
       try {
         const base = path.basename(src);
@@ -542,12 +550,23 @@ function registerIpc(): void {
           i++;
         }
         fs.copyFileSync(src, dest);
-        copied.push(dest);
+        fs.rmSync(src, { force: true });
+        moved.push(dest);
       } catch {
         /* 忽略单个失败 */
       }
     }
-    return copied;
+    return moved;
+  });
+
+  ipcMain.handle('file:delete', (_event, filePath: string) => {
+    try {
+      if (!filePath) return { ok: false, error: '无效的文件路径' };
+      fs.rmSync(filePath, { force: true });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
   });
 
   ipcMain.handle('shell:openPath', async (_event, filePath: string) => {
@@ -688,6 +707,36 @@ function registerIpc(): void {
         return { ok: false, error: String(err) };
       }
       setDataDir(target);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('library:deleteData', (_event, libraryId: string) => {
+    try {
+      const global = loadGlobal();
+      const lib = global.libraries.find((l) => l.id === libraryId);
+      if (!lib) return { ok: false, error: '库不存在' };
+      const lp = path.resolve(lib.path);
+      const dataDir = getDataDir();
+      const protectedPaths = [
+        path.resolve(dataDir),
+        path.resolve(app.getPath('userData')),
+        path.resolve(app.getPath('home')),
+      ];
+      // 保护：不能删除数据目录/用户目录/家目录，也不能删除包含数据目录的目录
+      if (
+        protectedPaths.some((p) => {
+          const rel = path.relative(lp, p);
+          return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+        })
+      ) {
+        return { ok: false, error: '该路径受保护，无法删除' };
+      }
+      fs.rmSync(lp, { recursive: true, force: true });
+      global.libraries = global.libraries.filter((l) => l.id !== libraryId);
+      saveGlobal(global);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err) };

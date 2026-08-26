@@ -6,6 +6,7 @@ import { MainArea } from './components/MainArea';
 import { DetailPanel } from './components/DetailPanel';
 import { LibraryDialog } from './components/LibraryDialog';
 import { SettingsDialog } from './components/SettingsDialog';
+import { ComicReader } from './components/ComicReader';
 import { TagManagerPage } from './components/TagManagerPage';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import { hydrate, hydrateTags } from './store/dataSlice';
@@ -112,6 +113,7 @@ export default function App() {
       </div>
       <LibraryDialog />
       <SettingsDialog />
+      <ComicReader />
     </div>
   );
 }

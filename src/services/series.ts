@@ -51,6 +51,11 @@ export function seriesMembers(s: Series, media: MediaItem[]): MediaItem[] {
     .sort((a, b) => a.fileName.localeCompare(b.fileName, 'zh', { numeric: true, sensitivity: 'base' }));
 }
 
+export function isPureImageSeries(s: Series, media: MediaItem[]): boolean {
+  if (s.memberIds.length === 0) return false;
+  return s.memberIds.every((id) => media.find((m) => m.id === id)?.type === 'image');
+}
+
 export function seriesCoverCandidates(s: Series, media: MediaItem[]): { member: MediaItem; coverPath: string }[] {
   const result: { member: MediaItem; coverPath: string }[] = [];
   for (const m of seriesMembers(s, media)) {

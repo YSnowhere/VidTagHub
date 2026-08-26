@@ -1,9 +1,9 @@
 import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
-import { Collections20Regular, Open20Regular } from '@fluentui/react-icons';
+import { Collections20Regular, Open20Regular, BookOpen20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { setSelectedSeries, setSeriesView, setView } from '../store/uiSlice';
+import { setSelectedSeries, setSeriesView, setComicReaderSeries, setView } from '../store/uiSlice';
 import { previewUrl } from '../services/format';
-import { seriesEffectiveTags, seriesTypeText } from '../services/series';
+import { seriesEffectiveTags, seriesTypeText, isPureImageSeries } from '../services/series';
 import { visibleTags } from '../services/tags';
 import type { Series, Tag } from '../types';
 
@@ -103,11 +103,19 @@ export function SeriesCard({ series }: Props) {
   const selected = selectedSeriesId === series.id;
   const memberCount = series.memberIds.length;
   const typeText = seriesTypeText(series, media);
+  const pureImages = isPureImageSeries(series, media);
 
   const openSeries = () => {
     dispatch(setSelectedSeries(series.id));
     dispatch(setSeriesView(series.id));
     dispatch(setView('media'));
+  };
+
+  const openReader = () => {
+    dispatch(setSelectedSeries(series.id));
+    dispatch(setSeriesView(series.id));
+    dispatch(setView('media'));
+    dispatch(setComicReaderSeries(series.id));
   };
 
   return (
@@ -136,6 +144,19 @@ export function SeriesCard({ series }: Props) {
           {typeText}
         </Badge>
         <div className={`${styles.coverActions} ${selected ? styles.cardHoverActions : ''}`}>
+          {pureImages && (
+            <Button
+              icon={<BookOpen20Regular />}
+              size="small"
+              appearance="primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                openReader();
+              }}
+            >
+              漫画阅读
+            </Button>
+          )}
           <Button
             icon={<Open20Regular />}
             size="small"

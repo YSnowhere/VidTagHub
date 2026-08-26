@@ -1,5 +1,5 @@
 import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
-import { ArrowLeft20Regular, Home20Regular, SelectAllOff20Regular, TagMultiple20Regular } from '@fluentui/react-icons';
+import { ArrowLeft20Regular, BookOpen20Regular, Home20Regular, SelectAllOff20Regular, TagMultiple20Regular } from '@fluentui/react-icons';
 import { useMemo, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -10,6 +10,7 @@ import {
   clearTagFilter,
   clearSelectedIds,
   clearSeriesView,
+  setComicReaderSeries,
   setSelectedMedia,
   setSelectedSeries,
   setSelectionMode,
@@ -20,7 +21,7 @@ import { VideoCard } from './VideoCard';
 import { SeriesCard } from './SeriesCard';
 import { TagBrowser } from './TagBrowser';
 import { SeriesTitleDialog } from './SeriesTitleDialog';
-import { memberIdSet, seriesEffectiveRestricted, seriesEffectiveTags } from '../services/series';
+import { memberIdSet, seriesEffectiveRestricted, seriesEffectiveTags, isPureImageSeries } from '../services/series';
 import type { MediaItem, Series } from '../types';
 
 const useStyles = makeStyles({
@@ -281,6 +282,16 @@ function MediaGrid() {
           <Badge appearance="tint" color="brand">
             系列：{viewingSeries.title}
           </Badge>
+        )}
+        {viewingSeries && isPureImageSeries(viewingSeries, media) && (
+          <Button
+            appearance="primary"
+            size="small"
+            icon={<BookOpen20Regular />}
+            onClick={() => dispatch(setComicReaderSeries(viewingSeries.id))}
+          >
+            漫画阅读
+          </Button>
         )}
         {selectedTagNames.map((name) => (
           <Badge key={name} appearance="tint" color="brand">

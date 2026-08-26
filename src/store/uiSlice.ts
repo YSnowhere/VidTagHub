@@ -8,6 +8,7 @@ interface UiState {
   selectedMediaId: string | null;
   selectedSeriesId: string | null;
   seriesViewId: string | null;
+  comicReaderSeriesId: string | null;
   selectionMode: boolean;
   selectedIds: string[];
   seriesTarget: string | null;
@@ -31,6 +32,7 @@ const initialState: UiState = {
   selectedMediaId: null,
   selectedSeriesId: null,
   seriesViewId: null,
+  comicReaderSeriesId: null,
   selectionMode: false,
   selectedIds: [],
   seriesTarget: null,
@@ -143,6 +145,12 @@ const uiSlice = createSlice({
     clearSeriesView: (state) => {
       state.seriesViewId = null;
     },
+    setComicReaderSeries: (state, action: PayloadAction<string | null>) => {
+      state.comicReaderSeriesId = action.payload;
+    },
+    clearComicReader: (state) => {
+      state.comicReaderSeriesId = null;
+    },
   },
 });
 
@@ -157,6 +165,8 @@ export const {
   setSelectedSeries,
   setSeriesView,
   clearSeriesView,
+  setComicReaderSeries,
+  clearComicReader,
   setSelectionMode,
   toggleSelectedId,
   clearSelectedIds,

@@ -3,7 +3,7 @@ import { Home20Regular, Tag20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { clearSeriesView, setSelectedCategory, setSelectedMedia, setSelectionMode, setTagFilter, setView } from '../store/uiSlice';
 import { previewUrl } from '../services/format';
-import { memberIdSet, seriesEffectiveRestricted, seriesEffectiveTags } from '../services/series';
+import { memberIdSet, memberSeriesIdSet, seriesEffectiveRestricted, seriesEffectiveTags } from '../services/series';
 import { visibleTags } from '../services/tags';
 import type { Tag } from '../types';
 
@@ -127,9 +127,10 @@ export function TagBrowser() {
   );
   const scopedSeries = series.filter(
     (s) =>
+      !memberSeriesIdSet(series).has(s.id) &&
       !hiddenLibraryIds.has(s.libraryId) &&
       (!selectedLibraryId || s.libraryId === selectedLibraryId) &&
-      (!onlyNSFW || seriesEffectiveRestricted(s, media))
+      (!onlyNSFW || seriesEffectiveRestricted(s, series, media))
   );
   const scopedTags = visibleTags(tags, showNSFW, onlyNSFW);
   const tagIdToCategory = new Map<string, string>();
@@ -137,10 +138,10 @@ export function TagBrowser() {
 
   const countForTag = (tagId: string) =>
     scopedMedia.filter((m) => m.tags.includes(tagId)).length +
-    scopedSeries.filter((s) => seriesEffectiveTags(s, media).includes(tagId)).length;
+    scopedSeries.filter((s) => seriesEffectiveTags(s, series, media).includes(tagId)).length;
   const countForCategory = (cat: string) =>
     scopedMedia.filter((m) => m.tags.some((id) => tagIdToCategory.get(id) === cat)).length +
-    scopedSeries.filter((s) => seriesEffectiveTags(s, media).some((id) => tagIdToCategory.get(id) === cat))
+    scopedSeries.filter((s) => seriesEffectiveTags(s, series, media).some((id) => tagIdToCategory.get(id) === cat))
       .length;
 
   const handleSelectTag = (tag: Tag) => {

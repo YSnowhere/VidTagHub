@@ -1,5 +1,4 @@
 import {
-  Badge,
   Button,
   Checkbox,
   Dialog,
@@ -97,9 +96,6 @@ export function TagEditDialog({
                     <Text weight="semibold" size={300}>
                       {cat}
                     </Text>
-                    <Badge appearance="outline" size="small">
-                      分类
-                    </Badge>
                   </div>
                   {catTags.map((tag) => (
                     <Checkbox

@@ -1,16 +1,21 @@
 import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
-import { ArrowLeft20Regular, BookOpen20Regular, Home20Regular, SelectAllOff20Regular, TagMultiple20Regular } from '@fluentui/react-icons';
+import { ArrowLeft20Regular, BookOpen20Regular, Home20Regular, SelectAllOff20Regular, Tag20Regular, TagMultiple20Regular } from '@fluentui/react-icons';
 import { useMemo, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   addSeriesMembers,
+  addSubSeries,
+  addTagToMediaBatch,
   createSeries,
+  setMediaPaths,
+  setMediaRestrictedBatch,
 } from '../store/dataSlice';
 import {
   clearTagFilter,
   clearSelectedIds,
   clearSeriesView,
   setComicReaderSeries,
+  setSelectedIds,
   setSelectedMedia,
   setSelectedSeries,
   setSelectionMode,
@@ -21,7 +26,16 @@ import { VideoCard } from './VideoCard';
 import { SeriesCard } from './SeriesCard';
 import { TagBrowser } from './TagBrowser';
 import { SeriesTitleDialog } from './SeriesTitleDialog';
-import { memberIdSet, seriesEffectiveRestricted, seriesEffectiveTags, isPureImageSeries } from '../services/series';
+import { BatchTagDialog } from './BatchTagDialog';
+import {
+  memberIdSet,
+  memberSeriesIdSet,
+  seriesEffectiveRestricted,
+  seriesEffectiveTags,
+  seriesSubSeries,
+  seriesTreeMembers,
+  isPureImageSeries,
+} from '../services/series';
 import type { MediaItem, Series } from '../types';
 
 const useStyles = makeStyles({
@@ -100,6 +114,7 @@ function MediaGrid() {
   }, [libraries, showNSFW, selectedLibraryId]);
 
   const [titleDialog, setTitleDialog] = useState(false);
+  const [batchTagOpen, setBatchTagOpen] = useState(false);
 
   const goHome = () => {
     dispatch(setSelectedMedia(null));
@@ -129,6 +144,7 @@ function MediaGrid() {
       tagName[t.id] = t.name.toLowerCase();
     });
     const hiddenMembers = memberIdSet(series);
+    const hiddenSubSeries = memberSeriesIdSet(series);
 
     const matchesKeyword = (text: string, kw: string): boolean => text.toLowerCase().includes(kw);
     const mediaKeywordHit = (m: MediaItem, kw: string): boolean => {
@@ -153,12 +169,13 @@ function MediaGrid() {
       return true;
     };
 
-    const matchSeries = (s: Series): boolean => {
+    const matchSeries = (s: Series, withinView: boolean): boolean => {
+      if (!withinView && hiddenSubSeries.has(s.id)) return false;
       if (hiddenLibraryIds.has(s.libraryId)) return false;
       if (selectedLibraryId && s.libraryId !== selectedLibraryId) return false;
-      if (!showNSFW && seriesEffectiveRestricted(s, media)) return false;
-      if (onlyNSFW && !seriesEffectiveRestricted(s, media)) return false;
-      const effTags = seriesEffectiveTags(s, media);
+      if (!showNSFW && seriesEffectiveRestricted(s, series, media)) return false;
+      if (onlyNSFW && !seriesEffectiveRestricted(s, series, media)) return false;
+      const effTags = seriesEffectiveTags(s, series, media);
       if (tagFilter.length && !tagFilter.every((t) => effTags.includes(t))) return false;
       if (keywords.length) {
         const hit = (kw: string): boolean => {
@@ -181,10 +198,12 @@ function MediaGrid() {
 
     let list: GridItem[];
     if (viewingSeries) {
-      const members = viewingSeries.memberIds
+      const subItems = seriesSubSeries(viewingSeries, series)
+        .filter((s) => matchSeries(s, true))
+        .map((s) => ({ kind: 'series' as const, series: s }));
+      const mediaItems = viewingSeries.memberIds
         .map((id) => media.find((m) => m.id === id))
-        .filter((m): m is MediaItem => Boolean(m));
-      list = members
+        .filter((m): m is MediaItem => Boolean(m))
         .filter((m) => {
           if (!showNSFW && m.restricted) return false;
           if (onlyNSFW && !m.restricted) return false;
@@ -196,10 +215,11 @@ function MediaGrid() {
           return true;
         })
         .map((m) => ({ kind: 'media' as const, media: m }));
+      list = [...subItems, ...mediaItems];
     } else {
       list = [
         ...media.filter(matchMedia).map((m) => ({ kind: 'media' as const, media: m })),
-        ...series.filter(matchSeries).map((s) => ({ kind: 'series' as const, series: s })),
+        ...series.filter((s) => matchSeries(s, false)).map((s) => ({ kind: 'series' as const, series: s })),
       ];
     }
     return list.sort((a, b) => {
@@ -226,8 +246,11 @@ function MediaGrid() {
   const selectedTagNames = tagFilter.map((id) => tags.find((t) => t.id === id)?.name ?? id);
   const nsfwCount = useMemo(() => {
     const hiddenMembers = memberIdSet(series);
+    const hiddenSubSeries = memberSeriesIdSet(series);
     let m = media.filter((x) => !hiddenMembers.has(x.id) && !hiddenLibraryIds.has(x.libraryId));
-    let s = series.filter((x) => !hiddenLibraryIds.has(x.libraryId));
+    let s = series.filter(
+      (x) => !hiddenLibraryIds.has(x.libraryId) && !hiddenSubSeries.has(x.id)
+    );
     if (selectedLibraryId) {
       m = m.filter((x) => x.libraryId === selectedLibraryId);
       s = s.filter((x) => x.libraryId === selectedLibraryId);
@@ -237,26 +260,120 @@ function MediaGrid() {
 
   const targetSeries = seriesTarget ? series.find((s) => s.id === seriesTarget) : null;
 
-  const handleMerge = () => {
+  const batchTargetIds = useMemo(() => {
+    const ids: string[] = [];
+    const push = (id: string): void => {
+      if (!ids.includes(id)) ids.push(id);
+    };
+    for (const id of selectedIds) {
+      const m = media.find((x) => x.id === id);
+      if (m) {
+        push(id);
+        continue;
+      }
+      const s = series.find((x) => x.id === id);
+      if (s) {
+        for (const mid of seriesTreeMembers(s, series, media)) push(mid.id);
+      }
+    }
+    return ids;
+  }, [selectedIds, media, series]);
+
+  const resolveMovedUpdates = (moved: { from: string; to: string }[]) => {
+    const updates: { id: string; filePath: string }[] = [];
+    for (const m of moved) {
+      const id = selectedIds.find(
+        (sid) => media.find((x) => x.id === sid)?.filePath === m.from
+      );
+      if (id) updates.push({ id, filePath: m.to });
+    }
+    return updates;
+  };
+
+  const handleMerge = async () => {
     if (selectedIds.length === 0) return;
     if (seriesTarget) {
-      dispatch(addSeriesMembers({ id: seriesTarget, memberIds: selectedIds }));
+      if (targetSeries?.folderPath) {
+        const files = selectedIds
+          .map((id) => media.find((m) => m.id === id)?.filePath)
+          .filter((p): p is string => Boolean(p));
+        if (files.length) {
+          const res = await window.electronAPI.moveSeriesMembers(targetSeries.folderPath, files);
+          if (res.ok && res.moved?.length) {
+            dispatch(setMediaPaths(resolveMovedUpdates(res.moved)));
+          }
+        }
+      }
+      const mediaIds = selectedIds.filter((id) => media.some((m) => m.id === id));
+      const seriesIds = selectedIds.filter((id) => series.some((s) => s.id === id));
+      if (mediaIds.length) dispatch(addSeriesMembers({ id: seriesTarget, memberIds: mediaIds }));
+      if (seriesIds.length) dispatch(addSubSeries({ id: seriesTarget, seriesIds }));
       dispatch(setSelectionMode(false));
       dispatch(setSelectedSeries(seriesTarget));
       return;
     }
-    const libId = selectedLibraryId ?? media.find((m) => selectedIds.includes(m.id))?.libraryId;
+    const libId =
+      selectedLibraryId ??
+      media.find((m) => selectedIds.includes(m.id))?.libraryId ??
+      series.find((s) => selectedIds.includes(s.id))?.libraryId;
     if (!libId) return;
     setTitleDialog(true);
   };
 
-  const handleCreateSeries = (title: string) => {
-    const libId = selectedLibraryId ?? media.find((m) => selectedIds.includes(m.id))?.libraryId;
+  const handleCreateSeries = async (title: string) => {
+    const libId =
+      selectedLibraryId ??
+      media.find((m) => selectedIds.includes(m.id))?.libraryId ??
+      series.find((s) => selectedIds.includes(s.id))?.libraryId;
     if (!libId) return;
-    const action = dispatch(createSeries({ libraryId: libId, title, memberIds: selectedIds }));
+    const lib = libraries.find((l) => l.id === libId);
+    if (!lib) {
+      setTitleDialog(false);
+      return;
+    }
+    const mediaIds = selectedIds.filter((id) => media.some((m) => m.id === id));
+    const seriesIds = selectedIds.filter((id) => series.some((s) => s.id === id));
+    const files = mediaIds
+      .map((id) => media.find((m) => m.id === id)?.filePath)
+      .filter((p): p is string => Boolean(p));
+    const res = await window.electronAPI.createSeriesFolder(lib.path, title, files);
     setTitleDialog(false);
+    if (!res.ok) return;
+    if (res.moved?.length) {
+      dispatch(setMediaPaths(resolveMovedUpdates(res.moved)));
+    }
+    let memberIds = mediaIds;
+    if (res.moved?.length) {
+      const movedIds = res.moved
+        .map((m) => mediaIds.find((sid) => media.find((x) => x.id === sid)?.filePath === m.from))
+        .filter((id): id is string => Boolean(id));
+      if (movedIds.length) memberIds = movedIds;
+    }
+    const action = dispatch(
+      createSeries({
+        libraryId: libId,
+        title: res.title ?? title,
+        memberIds,
+        memberSeriesIds: seriesIds,
+        folderPath: res.folderPath,
+      })
+    );
+    if (res.folderPath) {
+      void window.electronAPI.markSeriesFolder(res.folderPath, action.payload.id);
+    }
     dispatch(setSelectionMode(false));
     dispatch(setSelectedSeries(action.payload.id));
+  };
+
+  const handleSelectAll = () => {
+    dispatch(setSelectedIds(items.map((it) => (it.kind === 'media' ? it.media.id : it.series.id))));
+  };
+
+  const handleBatchTag = (tagIds: string[], restricted: boolean) => {
+    if (tagIds.length) {
+      dispatch(addTagToMediaBatch({ ids: batchTargetIds, tagIds }));
+    }
+    dispatch(setMediaRestrictedBatch({ ids: batchTargetIds, restricted }));
   };
 
   return (
@@ -283,7 +400,7 @@ function MediaGrid() {
             系列：{viewingSeries.title}
           </Badge>
         )}
-        {viewingSeries && isPureImageSeries(viewingSeries, media) && (
+        {viewingSeries && isPureImageSeries(viewingSeries, series, media) && (
           <Button
             appearance="primary"
             size="small"
@@ -322,15 +439,31 @@ function MediaGrid() {
             <Badge appearance="tint" color="brand">
               已选 {selectedIds.length} 项
             </Badge>
-            {selectedIds.length > 0 && (
-              <Button
-                appearance="primary"
-                size="small"
-                icon={<TagMultiple20Regular />}
-                onClick={handleMerge}
-              >
-                {targetSeries ? `加入「${targetSeries.title}」` : '合并为系列'}
+            {items.length > 0 && (
+              <Button size="small" appearance="outline" icon={<SelectAllOff20Regular />} onClick={handleSelectAll}>
+                全选
               </Button>
+            )}
+            {selectedIds.length > 0 && (
+              <>
+                <Button
+                  appearance="primary"
+                  size="small"
+                  icon={<TagMultiple20Regular />}
+                  onClick={handleMerge}
+                >
+                  {targetSeries ? `加入「${targetSeries.title}」` : '合并为系列'}
+                </Button>
+                <Button
+                  size="small"
+                  appearance="outline"
+                  icon={<Tag20Regular />}
+                  disabled={batchTargetIds.length === 0}
+                  onClick={() => setBatchTagOpen(true)}
+                >
+                  加标签 ({batchTargetIds.length})
+                </Button>
+              </>
             )}
             <Button size="small" appearance="subtle" onClick={() => dispatch(clearSelectedIds())}>
               清除
@@ -364,7 +497,13 @@ function MediaGrid() {
         title=""
         confirmLabel="创建系列"
         onClose={() => setTitleDialog(false)}
-        onConfirm={handleCreateSeries}
+        onConfirm={(title) => void handleCreateSeries(title)}
+      />
+      <BatchTagDialog
+        open={batchTagOpen}
+        targetCount={batchTargetIds.length}
+        onConfirm={handleBatchTag}
+        onClose={() => setBatchTagOpen(false)}
       />
     </div>
   );

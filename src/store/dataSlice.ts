@@ -1,7 +1,19 @@
 import { createSlice, nanoid, PayloadAction } from '@reduxjs/toolkit';
-import { AppData, Library, MediaItem, ScanResult, Series, Tag, DEFAULT_DATA } from '../types';
+import { AppData, Library, MediaItem, ScanFolder, ScanResult, Series, Tag, DEFAULT_DATA } from '../types';
 
 const initialState: AppData = DEFAULT_DATA;
+
+// 判断把 child 加入 parent 是否会造成循环嵌套（child 的子树已包含 parent）
+function wouldCreateCycle(child: Series, parentId: string, all: Series[]): boolean {
+  const stack = [...(child.memberSeriesIds ?? [])];
+  while (stack.length) {
+    const curId = stack.pop() as string;
+    if (curId === parentId) return true;
+    const cur = all.find((x) => x.id === curId);
+    if (cur) stack.push(...(cur.memberSeriesIds ?? []));
+  }
+  return false;
+}
 
 const dataSlice = createSlice({
   name: 'data',
@@ -22,6 +34,7 @@ const dataSlice = createSlice({
         ...s,
         tags: s.tags ?? [],
         memberIds: s.memberIds ?? [],
+        memberSeriesIds: s.memberSeriesIds ?? [],
         restricted: s.restricted ?? false,
         description: s.description ?? '',
       })),
@@ -115,6 +128,121 @@ const dataSlice = createSlice({
         .map((s) => ({ ...s, memberIds: s.memberIds.filter((mid) => mid !== id) }))
         .filter((s) => s.memberIds.length > 0);
     },
+    setMediaPaths: (state, action: PayloadAction<{ id: string; filePath: string }[]>) => {
+      for (const u of action.payload) {
+        const item = state.media.find((m) => m.id === u.id);
+        if (item) item.filePath = u.filePath;
+      }
+    },
+    applyScan: (
+      state,
+      action: PayloadAction<{
+        libraryId: string;
+        media: ScanResult[];
+        folders: ScanFolder[];
+      }>
+    ) => {
+      const { libraryId } = action.payload;
+      const norm = (p: string): string => p.replace(/[\\/]+/g, '/').toLowerCase();
+      const scannedPaths = new Set<string>();
+      const scannedFolders = new Set<string>();
+      for (const f of action.payload.media) scannedPaths.add(norm(f.filePath));
+      const collectFolders = (folders: ScanFolder[]): void => {
+        for (const folder of folders) {
+          scannedFolders.add(norm(folder.folderPath));
+          for (const m of folder.media) scannedPaths.add(norm(m.filePath));
+          collectFolders(folder.subFolders);
+        }
+      };
+      collectFolders(action.payload.folders);
+
+      // 同步扫描结果：删除 JSON 中磁盘上已不存在的媒体，并从未自系列中移除引用
+      const removedIds = new Set<string>();
+      for (const m of state.media) {
+        if (m.libraryId !== libraryId) continue;
+        if (!scannedPaths.has(norm(m.filePath))) removedIds.add(m.id);
+      }
+      if (removedIds.size) {
+        state.media = state.media.filter((m) => !removedIds.has(m.id));
+        for (const s of state.series) {
+          if (s.libraryId === libraryId) {
+            s.memberIds = s.memberIds.filter((mid) => !removedIds.has(mid));
+          }
+        }
+      }
+
+      // 同步扫描结果：删除 JSON 中文件夹已不存在的系列
+      state.series = state.series.filter(
+        (s) => s.libraryId !== libraryId || !s.folderPath || scannedFolders.has(norm(s.folderPath))
+      );
+      // 清理指向已被删除子系列的悬挂引用
+      const validSeriesIds = new Set(state.series.map((s) => s.id));
+      for (const s of state.series) {
+        if (s.libraryId !== libraryId) continue;
+        s.memberSeriesIds = (s.memberSeriesIds ?? []).filter((sid) => validSeriesIds.has(sid));
+      }
+
+      const ensureMedia = (file: ScanResult): MediaItem => {
+        const existing = state.media.find((m) => m.libraryId === libraryId && m.filePath === file.filePath);
+        if (existing) return existing;
+        const m: MediaItem = {
+          id: nanoid(),
+          libraryId,
+          filePath: file.filePath,
+          fileName: file.fileName,
+          type: file.type,
+          size: file.size,
+          modifiedAt: file.modifiedAt,
+          tags: [],
+          description: '',
+          createdAt: Date.now(),
+          restricted: false,
+        };
+        state.media.push(m);
+        return m;
+      };
+      for (const f of action.payload.media) ensureMedia(f);
+      const ensureSeries = (folder: ScanFolder): Series => {
+        let series = state.series.find((s) => s.id === folder.id && s.libraryId === libraryId);
+        if (!series) {
+          series = {
+            id: folder.id,
+            libraryId,
+            title: folder.title,
+            tags: [],
+            description: '',
+            createdAt: Date.now(),
+            restricted: false,
+            memberIds: [],
+            memberSeriesIds: [],
+            folderPath: folder.folderPath,
+          };
+          state.series.push(series);
+        }
+        series.folderPath = folder.folderPath;
+        series.title = folder.title;
+        series.memberIds = folder.media.map((f) => ensureMedia(f).id);
+        series.memberSeriesIds = folder.subFolders.map((sub) => ensureSeries(sub).id);
+        return series;
+      };
+      for (const folder of action.payload.folders) ensureSeries(folder);
+    },
+    addTagToMediaBatch: (state, action: PayloadAction<{ ids: string[]; tagIds: string[] }>) => {
+      const idSet = new Set(action.payload.ids);
+      for (const m of state.media) {
+        if (!idSet.has(m.id)) continue;
+        for (const t of action.payload.tagIds) {
+          if (!m.tags.includes(t)) m.tags.push(t);
+        }
+      }
+    },
+    setMediaRestrictedBatch: (state, action: PayloadAction<{ ids: string[]; restricted: boolean }>) => {
+      const idSet = new Set(action.payload.ids);
+      for (const m of state.media) {
+        if (!idSet.has(m.id)) continue;
+        m.restricted = action.payload.restricted;
+      }
+    },
     addCategory: (state, action: PayloadAction<string>) => {
       const name = action.payload.trim();
       if (!name || state.categories.includes(name)) return;
@@ -166,7 +294,13 @@ const dataSlice = createSlice({
       reducer: (state, action: PayloadAction<Series>) => {
         state.series.push(action.payload);
       },
-      prepare: (payload: { libraryId: string; title: string; memberIds: string[] }) => ({
+      prepare: (payload: {
+        libraryId: string;
+        title: string;
+        memberIds: string[];
+        memberSeriesIds?: string[];
+        folderPath?: string;
+      }) => ({
         payload: {
           id: nanoid(),
           libraryId: payload.libraryId,
@@ -176,6 +310,8 @@ const dataSlice = createSlice({
           createdAt: Date.now(),
           restricted: false,
           memberIds: payload.memberIds,
+          memberSeriesIds: payload.memberSeriesIds ?? [],
+          folderPath: payload.folderPath,
         },
       }),
     },
@@ -183,7 +319,9 @@ const dataSlice = createSlice({
       state,
       action: PayloadAction<{
         id: string;
-        patch: Partial<Pick<Series, 'title' | 'tags' | 'coverPath' | 'description' | 'restricted'>>;
+        patch: Partial<
+          Pick<Series, 'title' | 'tags' | 'coverPath' | 'description' | 'restricted' | 'folderPath' | 'memberSeriesIds'>
+        >;
       }>
     ) => {
       const series = state.series.find((s) => s.id === action.payload.id);
@@ -196,13 +334,36 @@ const dataSlice = createSlice({
         if (!series.memberIds.includes(mid)) series.memberIds.push(mid);
       }
     },
+    addSubSeries: (state, action: PayloadAction<{ id: string; seriesIds: string[] }>) => {
+      const series = state.series.find((s) => s.id === action.payload.id);
+      if (!series) return;
+      series.memberSeriesIds = series.memberSeriesIds ?? [];
+      for (const sid of action.payload.seriesIds) {
+        if (sid === series.id) continue;
+        if (series.memberSeriesIds.includes(sid)) continue;
+        const child = state.series.find((s) => s.id === sid);
+        if (child && wouldCreateCycle(child, series.id, state.series)) continue;
+        series.memberSeriesIds.push(sid);
+      }
+    },
+    removeSubSeries: (state, action: PayloadAction<{ id: string; seriesId: string }>) => {
+      const series = state.series.find((s) => s.id === action.payload.id);
+      if (!series) return;
+      series.memberSeriesIds = (series.memberSeriesIds ?? []).filter((sid) => sid !== action.payload.seriesId);
+    },
     removeSeriesMember: (state, action: PayloadAction<{ id: string; memberId: string }>) => {
       const series = state.series.find((s) => s.id === action.payload.id);
       if (!series) return;
       series.memberIds = series.memberIds.filter((m) => m !== action.payload.memberId);
     },
     removeSeries: (state, action: PayloadAction<string>) => {
-      state.series = state.series.filter((s) => s.id !== action.payload);
+      const id = action.payload;
+      state.series = state.series.filter((s) => s.id !== id);
+      for (const s of state.series) {
+        if (s.memberSeriesIds?.includes(id)) {
+          s.memberSeriesIds = s.memberSeriesIds.filter((sid) => sid !== id);
+        }
+      }
     },
   },
 });
@@ -217,6 +378,10 @@ export const {
   addMediaFromScan,
   updateMedia,
   removeMedia,
+  setMediaPaths,
+  applyScan,
+  addTagToMediaBatch,
+  setMediaRestrictedBatch,
   addCategory,
   removeCategory,
   addTag,
@@ -225,6 +390,8 @@ export const {
   createSeries,
   updateSeries,
   addSeriesMembers,
+  addSubSeries,
+  removeSubSeries,
   removeSeriesMember,
   removeSeries,
 } = dataSlice.actions;

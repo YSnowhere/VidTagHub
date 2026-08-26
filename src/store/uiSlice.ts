@@ -100,6 +100,9 @@ const uiSlice = createSlice({
     clearSelectedIds: (state) => {
       state.selectedIds = [];
     },
+    setSelectedIds: (state, action: PayloadAction<string[]>) => {
+      state.selectedIds = action.payload;
+    },
     setSeriesTarget: (state, action: PayloadAction<string | null>) => {
       state.seriesTarget = action.payload;
     },
@@ -170,6 +173,7 @@ export const {
   setSelectionMode,
   toggleSelectedId,
   clearSelectedIds,
+  setSelectedIds,
   setSeriesTarget,
   setLibraryDialogOpen,
   setSettingsOpen,

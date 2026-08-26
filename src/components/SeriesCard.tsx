@@ -3,7 +3,7 @@ import { Collections20Regular, Open20Regular, BookOpen20Regular } from '@fluentu
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedSeries, setSeriesView, setComicReaderSeries, setView } from '../store/uiSlice';
 import { previewUrl } from '../services/format';
-import { seriesEffectiveTags, seriesTypeText, isPureImageSeries } from '../services/series';
+import { seriesEffectiveTags, seriesTypeText, isPureImageSeries, seriesSubSeriesCount } from '../services/series';
 import { visibleTags } from '../services/tags';
 import type { Series, Tag } from '../types';
 
@@ -90,20 +90,22 @@ export function SeriesCard({ series }: Props) {
   const dispatch = useAppDispatch();
   const selectedSeriesId = useAppSelector((s) => s.ui.selectedSeriesId);
   const tags = useAppSelector((s) => s.data.tags);
+  const allSeries = useAppSelector((s) => s.data.series);
   const media = useAppSelector((s) => s.data.media);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const styles = useStyles();
 
   const itemTags = visibleTags(
-    seriesEffectiveTags(series, media)
+    seriesEffectiveTags(series, allSeries, media)
       .map((id) => tags.find((t) => t.id === id))
       .filter((t): t is Tag => Boolean(t)),
     showNSFW
   );
   const selected = selectedSeriesId === series.id;
-  const memberCount = series.memberIds.length;
-  const typeText = seriesTypeText(series, media);
-  const pureImages = isPureImageSeries(series, media);
+  const memberCount = series.memberIds.length + seriesSubSeriesCount(series);
+  const typeText = seriesTypeText(series, allSeries, media);
+  const pureImages = isPureImageSeries(series, allSeries, media);
+  const subCount = seriesSubSeriesCount(series);
 
   const openSeries = () => {
     dispatch(setSelectedSeries(series.id));
@@ -183,7 +185,7 @@ export function SeriesCard({ series }: Props) {
         </div>
       </div>
       <Badge size="small" appearance="outline" style={{ alignSelf: 'flex-start', margin: `0 0 6px 6px` }}>
-        {memberCount} 项
+        {memberCount} 项{subCount > 0 ? `（含 ${subCount} 个子系列）` : ''}
       </Badge>
     </div>
   );

@@ -16,6 +16,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pickImage: () => ipcRenderer.invoke('dialog:pickImage'),
   scanLibrary: (folder: string) => ipcRenderer.invoke('library:scan', folder),
   adoptLibrary: (folder: string) => ipcRenderer.invoke('library:adopt', folder),
+  createSeriesFolder: (libraryPath: string, title: string, filePaths: string[]) =>
+    ipcRenderer.invoke('series:createFolder', libraryPath, title, filePaths),
+  markSeriesFolder: (folderPath: string, seriesId: string) =>
+    ipcRenderer.invoke('series:markFolder', folderPath, seriesId),
+  migrateLegacySeries: (
+    libraryPath: string,
+    seriesList: { id: string; title: string; memberFilePaths: string[] }[]
+  ) => ipcRenderer.invoke('series:migrateLegacy', libraryPath, seriesList),
+  moveSeriesMembers: (folderPath: string, filePaths: string[]) =>
+    ipcRenderer.invoke('series:moveMembers', folderPath, filePaths),
+  renameSeriesFolder: (folderPath: string, newTitle: string) =>
+    ipcRenderer.invoke('series:renameFolder', folderPath, newTitle),
+  dissolveSeriesFolder: (folderPath: string) =>
+    ipcRenderer.invoke('series:dissolveFolder', folderPath),
   ensureFolder: (folder: string) => ipcRenderer.invoke('folder:ensure', folder),
   importFiles: (sources: string[], targetFolder: string) =>
     ipcRenderer.invoke('file:importFiles', sources, targetFolder),

@@ -32,8 +32,8 @@ import {
   setSelectedLibrary,
   setView,
 } from '../store/uiSlice';
-import { addMediaFromScan } from '../store/dataSlice';
 import { store } from '../store';
+import { scanAndApplyLibrary } from '../services/libraryScan';
 import { useState } from 'react';
 
 const useStyles = makeStyles({
@@ -97,8 +97,7 @@ export function Header() {
     try {
       await window.electronAPI.ensureFolder(lib.path);
       await window.electronAPI.importFiles(files, lib.path);
-      const scan = await window.electronAPI.scanLibrary(lib.path);
-      dispatch(addMediaFromScan({ libraryId: lib.id, files: scan }));
+      await scanAndApplyLibrary(dispatch, lib.id, lib.path);
       if (selectedLibraryId !== lib.id) dispatch(setSelectedLibrary(lib.id));
       dispatch(setView('media'));
     } finally {

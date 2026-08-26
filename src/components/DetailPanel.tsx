@@ -38,6 +38,8 @@ import {
   removeMedia,
   removeSeries,
   removeSeriesMember,
+  removeSubSeries,
+  setMediaPaths,
   updateMedia,
   updateSeries,
 } from '../store/dataSlice';
@@ -56,6 +58,7 @@ import {
   seriesEffectiveRestricted,
   seriesEffectiveTags,
   seriesMembers,
+  seriesSubSeries,
   seriesTypeText,
   seriesTotalSize,
 } from '../services/series';
@@ -237,6 +240,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
   const dispatch = useAppDispatch();
   const tags = useAppSelector((s) => s.data.tags);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
+  const seriesList = useAppSelector((s) => s.data.series);
   const styles = useStyles();
 
   const [tagEditOpen, setTagEditOpen] = useState(false);
@@ -267,7 +271,14 @@ function MediaDetail({ item }: { item: MediaItem }) {
   const handleRemove = () => {
     setDeleteOpen(false);
     void window.electronAPI.deleteFile(item.filePath);
+    const affected = seriesList.filter((s) => s.memberIds.includes(item.id));
     dispatch(removeMedia(item.id));
+    for (const s of affected) {
+      const remains = s.memberIds.filter((mid) => mid !== item.id);
+      if (remains.length === 0 && s.folderPath) {
+        void window.electronAPI.dissolveSeriesFolder(s.folderPath);
+      }
+    }
     dispatch(setSelectedMedia(null));
   };
 
@@ -479,6 +490,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
 function SeriesDetail({ series }: { series: Series }) {
   const dispatch = useAppDispatch();
   const tags = useAppSelector((s) => s.data.tags);
+  const allSeries = useAppSelector((s) => s.data.series);
   const media = useAppSelector((s) => s.data.media);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const styles = useStyles();
@@ -487,11 +499,12 @@ function SeriesDetail({ series }: { series: Series }) {
   const [cropTarget, setCropTarget] = useState<string | null>(null);
 
   const members = seriesMembers(series, media);
-  const effectiveTags = seriesEffectiveTags(series, media);
-  const totalSize = seriesTotalSize(series, media);
-  const typeText = seriesTypeText(series, media);
-  const coverCandidates = seriesCoverCandidates(series, media);
-  const effectiveRestricted = seriesEffectiveRestricted(series, media);
+  const subSeries = seriesSubSeries(series, allSeries);
+  const effectiveTags = seriesEffectiveTags(series, allSeries, media);
+  const totalSize = seriesTotalSize(series, allSeries, media);
+  const typeText = seriesTypeText(series, allSeries, media);
+  const coverCandidates = seriesCoverCandidates(series, allSeries, media);
+  const effectiveRestricted = seriesEffectiveRestricted(series, allSeries, media);
 
   const firstCover = (() => {
     if (series.coverPath) return previewUrl(series.coverPath);
@@ -518,7 +531,18 @@ function SeriesDetail({ series }: { series: Series }) {
     dispatch(setView('media'));
   };
 
-  const handleRemove = () => {
+  const handleRemove = async () => {
+    if (series.folderPath) {
+      const res = await window.electronAPI.dissolveSeriesFolder(series.folderPath);
+      if (res.ok && res.moved?.length) {
+        const updates: { id: string; filePath: string }[] = [];
+        for (const mv of res.moved) {
+          const m = media.find((x) => x.filePath === mv.from);
+          if (m) updates.push({ id: m.id, filePath: mv.to });
+        }
+        if (updates.length) dispatch(setMediaPaths(updates));
+      }
+    }
     dispatch(removeSeries(series.id));
     dispatch(setSelectedSeries(null));
     dispatch(clearSeriesView());
@@ -614,8 +638,42 @@ function SeriesDetail({ series }: { series: Series }) {
       </Field>
 
       <Field label="成员">
-        <Text size={200}>{members.length} 项</Text>
+        <Text size={200}>
+          {members.length} 个媒体{subSeries.length > 0 ? ` · ${subSeries.length} 个子系列` : ''}
+        </Text>
         <div className={styles.memberList}>
+          {subSeries.map((sub) => (
+            <div
+              key={sub.id}
+              className={styles.memberRow}
+              onClick={() => {
+                dispatch(setSelectedSeries(sub.id));
+                dispatch(setSeriesView(sub.id));
+                dispatch(setView('media'));
+              }}
+            >
+              {sub.coverPath ? (
+                <img className={styles.memberThumb} src={previewUrl(sub.coverPath)} alt="" draggable={false} loading="lazy" decoding="async" />
+              ) : (
+                <div className={styles.memberThumb} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Collections20Regular />
+                </div>
+              )}
+              <Text className={styles.memberName} size={200} title={sub.title}>
+                {sub.title}
+              </Text>
+              <Button
+                icon={<Dismiss20Regular />}
+                size="small"
+                appearance="subtle"
+                title="从系列移除"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dispatch(removeSubSeries({ id: series.id, seriesId: sub.id }));
+                }}
+              />
+            </div>
+          ))}
           {members.map((m) => {
             const thumb = m.coverPath
               ? previewUrl(m.coverPath)
@@ -715,8 +773,22 @@ function SeriesDetail({ series }: { series: Series }) {
         confirmLabel="保存"
         onClose={() => setRenameOpen(false)}
         onConfirm={(title) => {
-          dispatch(updateSeries({ id: series.id, patch: { title } }));
-          setRenameOpen(false);
+          void (async () => {
+            if (series.folderPath) {
+              const res = await window.electronAPI.renameSeriesFolder(series.folderPath, title);
+              if (res.ok) {
+                dispatch(
+                  updateSeries({
+                    id: series.id,
+                    patch: { title: res.title ?? title, folderPath: res.folderPath },
+                  })
+                );
+              }
+            } else {
+              dispatch(updateSeries({ id: series.id, patch: { title } }));
+            }
+            setRenameOpen(false);
+          })();
         }}
       />
       {cropTarget && (

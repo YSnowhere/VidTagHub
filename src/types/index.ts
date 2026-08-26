@@ -41,6 +41,8 @@ export interface Series {
   createdAt: number;
   restricted: boolean;
   memberIds: string[];
+  memberSeriesIds?: string[];
+  folderPath?: string;
 }
 
 export interface AppData {
@@ -57,6 +59,29 @@ export interface ScanResult {
   type: MediaType;
   size: number;
   modifiedAt: number;
+}
+
+export interface FolderScan {
+  markerId: string | null;
+  title: string;
+  folderPath: string;
+  media: ScanResult[];
+  subFolders: FolderScan[];
+}
+
+export interface ScanFolder extends FolderScan {
+  id: string;
+  subFolders: ScanFolder[];
+}
+
+export interface LibraryScan {
+  media: ScanResult[];
+  folders: FolderScan[];
+}
+
+export interface MovedFile {
+  from: string;
+  to: string;
 }
 
 export const DEFAULT_DATA: AppData = {

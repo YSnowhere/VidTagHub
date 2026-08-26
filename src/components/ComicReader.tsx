@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { clearComicReader } from '../store/uiSlice';
 import { mediaUrl } from '../services/format';
-import { seriesMembers } from '../services/series';
+import { seriesTreeMembers } from '../services/series';
 import { displayName } from '../services/format';
 import type { MediaItem } from '../types';
 
@@ -53,13 +53,12 @@ const useStyles = makeStyles({
   canvas: {
     flex: 1,
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     minHeight: 0,
-    overflow: 'hidden',
+    overflow: 'auto',
     position: 'relative',
   },
   pageWrap: {
+    margin: 'auto',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -72,17 +71,27 @@ const useStyles = makeStyles({
     objectFit: 'contain',
     userSelect: 'none',
   },
+  pageWrapFit: {
+    margin: 'auto',
+    flexShrink: 0,
+    lineHeight: 0,
+  },
+  pageImgFit: {
+    width: '100%',
+    height: '100%',
+    userSelect: 'none',
+  },
   scrollArea: {
     flex: 1,
     minHeight: 0,
-    overflowY: 'auto',
+    overflow: 'auto',
   },
   scrollItem: {
-    display: 'flex',
-    justifyContent: 'center',
     padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalM}`,
   },
   scrollImg: {
+    display: 'block',
+    margin: '0 auto',
     maxWidth: '100%',
     height: 'auto',
     userSelect: 'none',
@@ -96,33 +105,78 @@ export function ComicReader() {
   const dispatch = useAppDispatch();
   const seriesId = useAppSelector((s) => s.ui.comicReaderSeriesId);
   const series = useAppSelector((s) => s.data.series.find((x) => x.id === seriesId));
+  const allSeries = useAppSelector((s) => s.data.series);
   const media = useAppSelector((s) => s.data.media);
   const styles = useStyles();
 
   const [mode, setMode] = useState<ReaderMode>('page');
   const [currentPage, setCurrentPage] = useState(0);
   const [uiVisible, setUiVisible] = useState(true);
+  const [zoom, setZoom] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const lastWheelRef = useRef(0);
   const imgRefs = useRef<(HTMLImageElement | null)[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
 
   const pages = useMemo<MediaItem[]>(
     () =>
       series
-        ? seriesMembers(series, media).filter((m) => m.type === 'image')
+        ? seriesTreeMembers(series, allSeries, media).filter((m) => m.type === 'image')
         : [],
-    [series, media]
+    [series, allSeries, media]
   );
+
+  const preloadCount = 3;
+  const preloadedRef = useRef<{ index: number; img: HTMLImageElement }[]>([]);
+
+  useEffect(() => {
+    preloadedRef.current = [];
+  }, [seriesId]);
+
+  useEffect(() => {
+    if (mode !== 'page') return;
+    const loaded = new Set(preloadedRef.current.map((p) => p.index));
+    for (let i = currentPage + 1; i <= currentPage + preloadCount && i < pages.length; i++) {
+      if (loaded.has(i)) continue;
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = mediaUrl(pages[i].filePath);
+      preloadedRef.current.push({ index: i, img });
+    }
+  }, [mode, currentPage, pages]);
 
   useEffect(() => {
     setCurrentPage(0);
     setMode('page');
     setUiVisible(true);
+    setZoom(1);
   }, [seriesId]);
 
   useEffect(() => {
     if (seriesId && !series) dispatch(clearComicReader());
   }, [seriesId, series, dispatch]);
+
+  useEffect(() => {
+    setNaturalSize(null);
+    const el = canvasRef.current;
+    if (el) el.scrollTop = 0;
+  }, [currentPage]);
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const compute = () => {
+      if (!naturalSize) return;
+      const rect = el.getBoundingClientRect();
+      setFitScale(Math.min(1, rect.width / naturalSize.w, rect.height / naturalSize.h));
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [naturalSize]);
 
   const scrollToPage = (i: number) => {
     if (mode === 'scroll') {
@@ -166,8 +220,40 @@ export function ComicReader() {
     return () => window.removeEventListener('keydown', onKey);
   }, [seriesId, currentPage, mode, pages.length]);
 
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || mode !== 'page') return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        setZoom((z) => Math.min(8, Math.max(0.2, z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+        return;
+      }
+      if (zoom > 1.001) return;
+      const now = Date.now();
+      if (now - lastWheelRef.current < 350) return;
+      lastWheelRef.current = now;
+      if (e.deltaY > 0) goNext();
+      else if (e.deltaY < 0) goPrev();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [mode, zoom, currentPage, pages.length]);
+
+  useEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el || mode !== 'scroll') return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) => Math.min(8, Math.max(0.2, z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [mode]);
+
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (mode !== 'page') return;
+    if (mode !== 'page' || zoom > 1.001) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const w = rect.width;
@@ -177,18 +263,6 @@ export function ComicReader() {
       goNext();
     } else {
       toggleUi();
-    }
-  };
-
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (mode !== 'page') return;
-    const now = Date.now();
-    if (now - lastWheelRef.current < 350) return;
-    lastWheelRef.current = now;
-    if (e.deltaY > 0) {
-      goNext();
-    } else if (e.deltaY < 0) {
-      goPrev();
     }
   };
 
@@ -213,6 +287,10 @@ export function ComicReader() {
   if (!seriesId || !series) return null;
 
   const current = pages[currentPage];
+  const dispW = naturalSize ? Math.round(naturalSize.w * fitScale * zoom) : undefined;
+  const dispH = naturalSize ? Math.round(naturalSize.h * fitScale * zoom) : undefined;
+  const scrollZoomStyle =
+    zoom > 1.001 ? { width: `${zoom * 100}%`, maxWidth: 'none' } : { width: 'auto', maxWidth: `${zoom * 100}%` };
 
   return (
     <div className={styles.overlay}>
@@ -258,20 +336,36 @@ export function ComicReader() {
       </div>
 
       {mode === 'page' ? (
-        <div className={styles.canvas} onClick={handleCanvasClick} onWheel={handleWheel}>
-          {current && (
-            <div className={styles.pageWrap}>
-              <img
-                key={current.id}
-                className={styles.pageImg}
-                src={mediaUrl(current.filePath)}
-                alt={current.fileName}
-                draggable={false}
-                loading="eager"
-                decoding="async"
-              />
-            </div>
-          )}
+        <div className={styles.canvas} ref={canvasRef} onClick={handleCanvasClick}>
+          {current &&
+            (naturalSize ? (
+              <div className={styles.pageWrapFit} style={{ width: dispW, height: dispH }}>
+                <img
+                  key={current.id}
+                  className={styles.pageImgFit}
+                  src={mediaUrl(current.filePath)}
+                  alt={current.fileName}
+                  draggable={false}
+                  loading="eager"
+                  decoding="async"
+                />
+              </div>
+            ) : (
+              <div className={styles.pageWrap}>
+                <img
+                  key={current.id}
+                  className={styles.pageImg}
+                  src={mediaUrl(current.filePath)}
+                  alt={current.fileName}
+                  draggable={false}
+                  loading="eager"
+                  decoding="async"
+                  onLoad={(e) =>
+                    setNaturalSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+                  }
+                />
+              </div>
+            ))}
         </div>
       ) : (
         <div className={styles.scrollArea} ref={scrollAreaRef} onScroll={handleScroll}>
@@ -282,6 +376,7 @@ export function ComicReader() {
                   imgRefs.current[i] = el;
                 }}
                 className={styles.scrollImg}
+                style={scrollZoomStyle}
                 src={mediaUrl(m.filePath)}
                 alt={m.fileName}
                 title={displayName(m.fileName)}

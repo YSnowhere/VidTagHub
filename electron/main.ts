@@ -47,6 +47,8 @@ interface Series {
   createdAt: number;
   restricted: boolean;
   memberIds: string[];
+  memberSeriesIds?: string[];
+  folderPath?: string;
 }
 
 interface AppData {
@@ -77,6 +79,30 @@ interface ScanResult {
   type: MediaType;
   size: number;
   modifiedAt: number;
+}
+
+interface FolderScan {
+  markerId: string | null;
+  title: string;
+  folderPath: string;
+  media: ScanResult[];
+  subFolders: FolderScan[];
+}
+
+interface LibraryScan {
+  media: ScanResult[];
+  folders: FolderScan[];
+}
+
+interface MovedFile {
+  from: string;
+  to: string;
+}
+
+interface LegacySeriesPayload {
+  id: string;
+  title: string;
+  memberFilePaths: string[];
 }
 
 const VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m4v', '.mpg', '.mpeg', '.rmvb'];
@@ -220,6 +246,7 @@ function loadLibraryFile(libPath: string): LibraryFile {
       series: (parsed.series ?? []).map((s) => ({
         ...s,
         ...(s.coverPath ? { coverPath: resolveStoredPath(libPath, s.coverPath) } : {}),
+        ...(s.folderPath ? { folderPath: resolveStoredPath(libPath, s.folderPath) } : {}),
       })),
     };
   } catch {
@@ -283,6 +310,7 @@ function saveData(data: AppData): void {
           .map((s) => ({
             ...s,
             ...(s.coverPath ? { coverPath: toRelativePath(lib.path, s.coverPath) } : {}),
+            ...(s.folderPath ? { folderPath: toRelativePath(lib.path, s.folderPath) } : {}),
           })),
       };
       fs.writeFileSync(libraryDataFile(lib.path), JSON.stringify(libData, null, 2), 'utf-8');
@@ -309,8 +337,139 @@ function notifyTagsChanged(): void {
   }
 }
 
-function scanMedia(folder: string): ScanResult[] {
-  const results: ScanResult[] = [];
+function seriesMarkerFile(folderPath: string): string {
+  return path.join(folderPath, '.vision-series.json');
+}
+
+function readSeriesMarker(folderPath: string): { id?: string } | null {
+  try {
+    if (!fs.existsSync(seriesMarkerFile(folderPath))) return null;
+    return JSON.parse(fs.readFileSync(seriesMarkerFile(folderPath), 'utf-8')) as { id?: string };
+  } catch {
+    return null;
+  }
+}
+
+function pushScanResult(media: ScanResult[], full: string, entryName: string): void {
+  const ext = path.extname(entryName).toLowerCase();
+  const type: MediaType | null = VIDEO_EXTS.includes(ext)
+    ? 'video'
+    : IMAGE_EXTS.includes(ext)
+    ? 'image'
+    : PDF_EXTS.includes(ext)
+    ? 'pdf'
+    : null;
+  if (!type) return;
+  let stat;
+  try {
+    stat = fs.statSync(full);
+  } catch {
+    return;
+  }
+  media.push({
+    filePath: full,
+    fileName: entryName,
+    type,
+    size: stat.size,
+    modifiedAt: stat.mtimeMs,
+  });
+}
+
+function scanFolderRecursive(folderPath: string): FolderScan {
+  const marker = readSeriesMarker(folderPath);
+  const media: ScanResult[] = [];
+  const subFolders: FolderScan[] = [];
+  let entries;
+  try {
+    entries = fs.readdirSync(folderPath, { withFileTypes: true });
+  } catch {
+    return { markerId: marker?.id ?? null, title: path.basename(folderPath), folderPath, media, subFolders };
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const full = path.join(folderPath, entry.name);
+    if (entry.isDirectory()) {
+      subFolders.push(scanFolderRecursive(full));
+    } else if (entry.isFile()) {
+      pushScanResult(media, full, entry.name);
+    }
+  }
+  return { markerId: marker?.id ?? null, title: path.basename(folderPath), folderPath, media, subFolders };
+}
+
+function scanLibrary(libraryPath: string): LibraryScan {
+  const media: ScanResult[] = [];
+  const folders: FolderScan[] = [];
+  let entries;
+  try {
+    entries = fs.readdirSync(libraryPath, { withFileTypes: true });
+  } catch {
+    return { media, folders };
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const full = path.join(libraryPath, entry.name);
+    if (entry.isDirectory()) {
+      folders.push(scanFolderRecursive(full));
+    } else if (entry.isFile()) {
+      pushScanResult(media, full, entry.name);
+    }
+  }
+  return { media, folders };
+}
+
+function sanitizeFolderName(name: string): string {
+  return (name ?? '').trim().replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function uniqueFolderPath(parent: string, base: string): { folderPath: string; name: string } {
+  let name = base;
+  let folderPath = path.join(parent, name);
+  let i = 1;
+  while (fs.existsSync(folderPath)) {
+    name = `${base} (${i})`;
+    folderPath = path.join(parent, name);
+    i++;
+  }
+  return { folderPath, name };
+}
+
+function moveFileIntoFolder(src: string, destFolder: string): MovedFile | null {
+  try {
+    if (!src || !fs.existsSync(src)) return null;
+    const base = path.basename(src);
+    let dest = path.join(destFolder, base);
+    let i = 1;
+    while (fs.existsSync(dest)) {
+      const ext = path.extname(base);
+      const stem = path.basename(base, ext);
+      dest = path.join(destFolder, `${stem} (${i})${ext}`);
+      i++;
+    }
+    try {
+      fs.renameSync(src, dest);
+    } catch {
+      fs.copyFileSync(src, dest);
+      fs.rmSync(src, { force: true });
+    }
+    return { from: src, to: dest };
+  } catch {
+    return null;
+  }
+}
+
+function moveFilesIntoFolder(destFolder: string, filePaths: string[]): MovedFile[] {
+  const moved: MovedFile[] = [];
+  for (const src of filePaths ?? []) {
+    const r = moveFileIntoFolder(src, destFolder);
+    if (r) moved.push(r);
+  }
+  return moved;
+}
+
+function dissolveFolder(folderPath: string): MovedFile[] {
+  const parent = path.dirname(folderPath);
+  const moved: MovedFile[] = [];
   const walk = (dir: string): void => {
     let entries;
     try {
@@ -323,34 +482,19 @@ function scanMedia(folder: string): ScanResult[] {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (entry.isFile()) {
-        const ext = path.extname(entry.name).toLowerCase();
-        const type: MediaType | null = VIDEO_EXTS.includes(ext)
-          ? 'video'
-          : IMAGE_EXTS.includes(ext)
-          ? 'image'
-          : PDF_EXTS.includes(ext)
-          ? 'pdf'
-          : null;
-        if (!type) continue;
-        let stat;
-        try {
-          stat = fs.statSync(full);
-        } catch {
-          continue;
-        }
-        results.push({
-          filePath: full,
-          fileName: entry.name,
-          type,
-          size: stat.size,
-          modifiedAt: stat.mtimeMs,
-        });
+      } else {
+        const r = moveFileIntoFolder(parent, full);
+        if (r) moved.push(r);
       }
     }
   };
-  walk(folder);
-  return results;
+  walk(folderPath);
+  try {
+    fs.rmSync(folderPath, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
+  return moved;
 }
 
 const MIME: Record<string, string> = {
@@ -496,7 +640,108 @@ function registerIpc(): void {
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
   });
 
-  ipcMain.handle('library:scan', (_event, folder: string) => scanMedia(folder));
+  ipcMain.handle('library:scan', (_event, folder: string) => scanLibrary(folder));
+
+  ipcMain.handle('series:createFolder', (_event, libraryPath: string, title: string, filePaths: string[]) => {
+    try {
+      const clean = sanitizeFolderName(title);
+      if (!clean) return { ok: false, error: '无效的系列名称' };
+      if (!libraryPath || !fs.existsSync(libraryPath)) {
+        return { ok: false, error: '库文件夹不存在' };
+      }
+      const { folderPath, name } = uniqueFolderPath(libraryPath, clean);
+      fs.mkdirSync(folderPath, { recursive: true });
+      const moved = moveFilesIntoFolder(folderPath, filePaths ?? []);
+      return { ok: true, folderPath, title: name, moved };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('series:markFolder', (_event, folderPath: string, seriesId: string) => {
+    try {
+      if (!folderPath || !seriesId) return { ok: false, error: '无效的参数' };
+      fs.mkdirSync(folderPath, { recursive: true });
+      fs.writeFileSync(seriesMarkerFile(folderPath), JSON.stringify({ id: seriesId }, null, 2), 'utf-8');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle(
+    'series:migrateLegacy',
+    (_event, libraryPath: string, seriesList: LegacySeriesPayload[]) => {
+      try {
+        if (!libraryPath || !fs.existsSync(libraryPath)) {
+          return { ok: false, error: '库文件夹不存在' };
+        }
+        const migrated: { id: string; folderPath: string; title: string; moved: MovedFile[] }[] = [];
+        for (const s of seriesList ?? []) {
+          const clean = sanitizeFolderName(s.title);
+          if (!clean) continue;
+          const { folderPath, name } = uniqueFolderPath(libraryPath, clean);
+          fs.mkdirSync(folderPath, { recursive: true });
+          const moved = moveFilesIntoFolder(folderPath, s.memberFilePaths ?? []);
+          fs.writeFileSync(seriesMarkerFile(folderPath), JSON.stringify({ id: s.id }, null, 2), 'utf-8');
+          migrated.push({ id: s.id, folderPath, title: name, moved });
+        }
+        return { ok: true, migrated };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
+    }
+  );
+
+  ipcMain.handle('series:moveMembers', (_event, folderPath: string, filePaths: string[]) => {
+    try {
+      if (!folderPath || !fs.existsSync(folderPath)) {
+        return { ok: false, error: '系列文件夹不存在' };
+      }
+      const moved = moveFilesIntoFolder(folderPath, filePaths ?? []);
+      return { ok: true, moved };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('series:renameFolder', (_event, folderPath: string, newTitle: string) => {
+    try {
+      const clean = sanitizeFolderName(newTitle);
+      if (!clean) return { ok: false, error: '无效的系列名称' };
+      if (!folderPath || !fs.existsSync(folderPath)) {
+        return { ok: false, error: '系列文件夹不存在' };
+      }
+      const parent = path.dirname(folderPath);
+      let name = clean;
+      let target = path.join(parent, name);
+      let i = 1;
+      while (fs.existsSync(target) && path.resolve(target) !== path.resolve(folderPath)) {
+        name = `${clean} (${i})`;
+        target = path.join(parent, name);
+        i++;
+      }
+      if (path.resolve(target) === path.resolve(folderPath)) {
+        return { ok: true, folderPath, title: name };
+      }
+      fs.renameSync(folderPath, target);
+      return { ok: true, folderPath: target, title: name };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('series:dissolveFolder', (_event, folderPath: string) => {
+    try {
+      if (!folderPath || !fs.existsSync(folderPath)) {
+        return { ok: false, error: '系列文件夹不存在' };
+      }
+      const moved = dissolveFolder(folderPath);
+      return { ok: true, moved };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
 
   ipcMain.handle('library:adopt', (_event, folder: string) => {
     if (!folder) return null;
@@ -520,6 +765,7 @@ function registerIpc(): void {
         series: (parsed.series ?? []).map((s) => ({
           ...s,
           ...(s.coverPath ? { coverPath: resolveStoredPath(folder, s.coverPath) } : {}),
+          ...(s.folderPath ? { folderPath: resolveStoredPath(folder, s.folderPath) } : {}),
         })),
       };
     } catch {

@@ -1,4 +1,4 @@
-import type { AppData, MediaItem, ScanResult, Series, Tag } from './types';
+import type { AppData, FolderScan, LibraryScan, MediaItem, MovedFile, ScanResult, Series, Tag } from './types';
 
 interface AdoptedLibrary {
   libraryId: string | null;
@@ -19,8 +19,33 @@ declare global {
       pickFolder: () => Promise<string | null>;
       pickFiles: () => Promise<string[]>;
       pickImage: () => Promise<string | null>;
-      scanLibrary: (folder: string) => Promise<ScanResult[]>;
+      scanLibrary: (folder: string) => Promise<LibraryScan>;
       adoptLibrary: (folder: string) => Promise<AdoptedLibrary | null>;
+      createSeriesFolder: (
+        libraryPath: string,
+        title: string,
+        filePaths: string[]
+      ) => Promise<{ ok: boolean; folderPath?: string; title?: string; moved?: MovedFile[]; error?: string }>;
+      markSeriesFolder: (folderPath: string, seriesId: string) => Promise<{ ok: boolean; error?: string }>;
+      migrateLegacySeries: (
+        libraryPath: string,
+        seriesList: { id: string; title: string; memberFilePaths: string[] }[]
+      ) => Promise<{
+        ok: boolean;
+        migrated?: { id: string; folderPath: string; title: string; moved?: MovedFile[] }[];
+        error?: string;
+      }>;
+      moveSeriesMembers: (
+        folderPath: string,
+        filePaths: string[]
+      ) => Promise<{ ok: boolean; moved?: MovedFile[]; error?: string }>;
+      renameSeriesFolder: (
+        folderPath: string,
+        newTitle: string
+      ) => Promise<{ ok: boolean; folderPath?: string; title?: string; error?: string }>;
+      dissolveSeriesFolder: (
+        folderPath: string
+      ) => Promise<{ ok: boolean; moved?: MovedFile[]; error?: string }>;
       ensureFolder: (folder: string) => Promise<{ ok: boolean; error?: string }>;
       importFiles: (sources: string[], targetFolder: string) => Promise<string[]>;
       deleteFile: (filePath: string) => Promise<{ ok: boolean; error?: string }>;

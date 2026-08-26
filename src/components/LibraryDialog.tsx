@@ -15,9 +15,10 @@ import {
 import { Folder20Regular } from '@fluentui/react-icons';
 import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { addLibrary, addMediaFromScan, upsertLibrary, setLibraryData } from '../store/dataSlice';
+import { addLibrary, upsertLibrary, setLibraryData } from '../store/dataSlice';
 import { setLibraryDialogOpen } from '../store/uiSlice';
 import { store } from '../store';
+import { scanAndApplyLibrary } from '../services/libraryScan';
 
 const useStyles = makeStyles({
   row: {
@@ -88,8 +89,7 @@ export function LibraryDialog() {
         dispatch(addLibrary({ name: name.trim(), path: folder }));
         const lib = store.getState().data.libraries.find((l) => l.path === folder);
         if (lib) {
-          const files = await window.electronAPI.scanLibrary(folder);
-          dispatch(addMediaFromScan({ libraryId: lib.id, files }));
+          await scanAndApplyLibrary(dispatch, lib.id, folder);
         }
       }
     } finally {

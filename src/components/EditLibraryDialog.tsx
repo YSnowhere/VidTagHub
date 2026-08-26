@@ -17,8 +17,9 @@ import {
 import { ArrowClockwise20Regular, Delete20Regular } from '@fluentui/react-icons';
 import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { addMediaFromScan, removeLibrary, upsertLibrary } from '../store/dataSlice';
+import { removeLibrary, upsertLibrary } from '../store/dataSlice';
 import { setSelectedLibrary } from '../store/uiSlice';
+import { scanAndApplyLibrary } from '../services/libraryScan';
 import type { Library } from '../types';
 
 interface Props {
@@ -93,8 +94,7 @@ export function EditLibraryDialog({ open, libraryId, onClose }: Props) {
     if (scanning) return;
     setScanning(true);
     try {
-      const files = await window.electronAPI.scanLibrary(library.path);
-      dispatch(addMediaFromScan({ libraryId: library.id, files }));
+      await scanAndApplyLibrary(dispatch, library.id, library.path);
     } finally {
       setScanning(false);
     }

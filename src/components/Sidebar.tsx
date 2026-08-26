@@ -29,7 +29,7 @@ import {
   setSelectedCategory,
   setView,
 } from '../store/uiSlice';
-import { memberIdSet } from '../services/series';
+import { memberIdSet, memberSeriesIdSet } from '../services/series';
 import { EditLibraryDialog } from './EditLibraryDialog';
 import type { Library } from '../types';
 
@@ -108,6 +108,7 @@ export function Sidebar() {
   const [editTarget, setEditTarget] = useState<Library | null>(null);
 
   const hiddenMembers = memberIdSet(series);
+  const hiddenSubSeries = memberSeriesIdSet(series);
 
   const aggregateHiddenIds = new Set(
     libraries
@@ -117,7 +118,7 @@ export function Sidebar() {
 
   const countForLibrary = (libId: string) =>
     media.filter((m) => m.libraryId === libId && !hiddenMembers.has(m.id)).length +
-    series.filter((s) => s.libraryId === libId).length;
+    series.filter((s) => s.libraryId === libId && !hiddenSubSeries.has(s.id)).length;
 
   const handleConfirmRemove = () => {
     if (!removeTarget) return;
@@ -181,7 +182,7 @@ export function Sidebar() {
         </span>
         <Badge className={styles.count} size="small" appearance="tint">
           {media.filter((m) => !hiddenMembers.has(m.id) && !aggregateHiddenIds.has(m.libraryId)).length +
-            series.filter((s) => !aggregateHiddenIds.has(s.libraryId)).length}
+            series.filter((s) => !hiddenSubSeries.has(s.id) && !aggregateHiddenIds.has(s.libraryId)).length}
         </Badge>
       </div>
 

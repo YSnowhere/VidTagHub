@@ -120,6 +120,7 @@ const DEFAULT_GLOBAL: GlobalData = {
 
 let mainWindow: BrowserWindow | null = null;
 let tagManagerWindow: BrowserWindow | null = null;
+let comicReaderWindow: BrowserWindow | null = null;
 
 const clone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj)) as T;
 
@@ -190,7 +191,7 @@ function saveGlobal(global: GlobalData): void {
   fs.writeFileSync(globalFile(), JSON.stringify(global, null, 2), 'utf-8');
 }
 
-function movePath(from: string, to: string): void {
+function movePath(from: string, to: string, log?: MovedFile[]): void {
   const rel = path.relative(path.resolve(from), path.resolve(to));
   if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
     return; // 目标位于源目录内部或相同，禁止移动，避免无限递归
@@ -200,7 +201,7 @@ function movePath(from: string, to: string): void {
     fs.mkdirSync(to, { recursive: true });
     for (const e of fs.readdirSync(from)) {
       try {
-        movePath(path.join(from, e), path.join(to, e));
+        movePath(path.join(from, e), path.join(to, e), log);
       } catch {
         /* 单个文件失败继续 */
       }
@@ -215,9 +216,44 @@ function movePath(from: string, to: string): void {
       if (fs.existsSync(to)) fs.rmSync(to, { force: true });
       fs.copyFileSync(from, to);
       fs.rmSync(from, { force: true });
+      log?.push({ from, to });
     } catch {
       /* ignore */
     }
+  }
+}
+
+function moveSeriesFolder(
+  folderPath: string,
+  targetParent: string
+): { ok: boolean; newFolderPath?: string; title?: string; moved?: MovedFile[]; error?: string } {
+  try {
+    if (!folderPath || !fs.existsSync(folderPath)) return { ok: false, error: '系列文件夹不存在' };
+    if (!targetParent || !fs.existsSync(targetParent)) return { ok: false, error: '目标文件夹不存在' };
+    const from = path.resolve(folderPath);
+    const parent = path.resolve(targetParent);
+    const base = path.basename(from);
+    let name = base;
+    let dest = path.join(parent, name);
+    let i = 1;
+    while (fs.existsSync(dest) && path.resolve(dest) !== from) {
+      name = `${base} (${i})`;
+      dest = path.join(parent, name);
+      i++;
+    }
+    if (path.resolve(dest) === from) {
+      // 已在目标位置（同名）
+      return { ok: true, newFolderPath: from, title: base, moved: [] };
+    }
+    const destRel = path.relative(from, dest);
+    if (destRel === '' || (!destRel.startsWith('..') && !path.isAbsolute(destRel))) {
+      return { ok: false, error: '不能将文件夹移动到其自身内部' };
+    }
+    const moved: MovedFile[] = [];
+    movePath(from, dest, moved);
+    return { ok: true, newFolderPath: dest, title: name, moved };
+  } catch (err) {
+    return { ok: false, error: String(err) };
   }
 }
 
@@ -437,6 +473,7 @@ function uniqueFolderPath(parent: string, base: string): { folderPath: string; n
 function moveFileIntoFolder(src: string, destFolder: string): MovedFile | null {
   try {
     if (!src || !fs.existsSync(src)) return null;
+    if (path.dirname(path.resolve(src)) === path.resolve(destFolder)) return null; // 已在目标文件夹中
     const base = path.basename(src);
     let dest = path.join(destFolder, base);
     let i = 1;
@@ -579,11 +616,53 @@ function createTagManagerWindow(): void {
   });
 }
 
+function createComicReaderWindow(seriesId: string): void {
+  if (comicReaderWindow && !comicReaderWindow.isDestroyed()) {
+    comicReaderWindow.webContents.send('reader:navigate', seriesId);
+    comicReaderWindow.focus();
+    return;
+  }
+  comicReaderWindow = new BrowserWindow({
+    width: 1100,
+    height: 800,
+    minWidth: 800,
+    minHeight: 560,
+    title: '漫画阅读 - VidTagHub',
+    icon: path.join(__dirname, '..', 'icon.ico'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
+  });
+
+  const devUrl = process.env.ELECTRON_START_URL;
+  const query = `page=comicreader&series=${encodeURIComponent(seriesId)}`;
+  if (devUrl) {
+    void comicReaderWindow.loadURL(`${devUrl}?${query}`);
+  } else {
+    void comicReaderWindow.loadFile(path.join(__dirname, '..', 'index.html'), {
+      search: query,
+    });
+  }
+
+  comicReaderWindow.on('closed', () => {
+    comicReaderWindow = null;
+  });
+}
+
 function registerIpc(): void {
   ipcMain.handle('data:load', () => loadData());
 
   ipcMain.handle('window:openTagManager', () => {
     createTagManagerWindow();
+    return { ok: true };
+  });
+
+  ipcMain.handle('reader:open', (_event, seriesId: string) => {
+    if (!seriesId) return { ok: false, error: '无效的参数' };
+    createComicReaderWindow(seriesId);
     return { ok: true };
   });
 
@@ -705,6 +784,19 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.handle('series:moveMembersOut', (_event, folderPath: string, filePaths: string[]) => {
+    try {
+      if (!folderPath || !fs.existsSync(folderPath)) {
+        return { ok: false, error: '系列文件夹不存在' };
+      }
+      const target = path.dirname(folderPath);
+      const moved = moveFilesIntoFolder(target, filePaths ?? []);
+      return { ok: true, moved };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
   ipcMain.handle('series:renameFolder', (_event, folderPath: string, newTitle: string) => {
     try {
       const clean = sanitizeFolderName(newTitle);
@@ -738,6 +830,19 @@ function registerIpc(): void {
       }
       const moved = dissolveFolder(folderPath);
       return { ok: true, moved };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('series:moveFolderInto', (_event, folderPath: string, targetParentFolder: string) =>
+    moveSeriesFolder(folderPath, targetParentFolder)
+  );
+
+  ipcMain.handle('series:moveFolderOut', (_event, folderPath: string, parentFolderPath: string) => {
+    try {
+      if (!parentFolderPath) return { ok: false, error: '无效的父系列文件夹' };
+      return moveSeriesFolder(folderPath, path.dirname(parentFolderPath));
     } catch (err) {
       return { ok: false, error: String(err) };
     }

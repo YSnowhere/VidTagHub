@@ -68,6 +68,7 @@ import { RenameDialog } from './RenameDialog';
 import { FrameCaptureDialog } from './FrameCaptureDialog';
 import { CropImageDialog } from './CropImageDialog';
 import { SeriesTitleDialog } from './SeriesTitleDialog';
+import { moveMediaOutOfSeries, moveSubSeriesOut } from '../services/seriesMove';
 import type { MediaItem, Series, Tag } from '../types';
 
 const useStyles = makeStyles({
@@ -669,6 +670,7 @@ function SeriesDetail({ series }: { series: Series }) {
                 title="从系列移除"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (series.folderPath) void moveSubSeriesOut(series.folderPath, sub, dispatch);
                   dispatch(removeSubSeries({ id: series.id, seriesId: sub.id }));
                 }}
               />
@@ -703,6 +705,7 @@ function SeriesDetail({ series }: { series: Series }) {
                   title="从系列移除"
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (series.folderPath) void moveMediaOutOfSeries(series.folderPath, [m.id], dispatch);
                     dispatch(removeSeriesMember({ id: series.id, memberId: m.id }));
                   }}
                 />

@@ -10,12 +10,15 @@ interface AdoptedLibrary {
 declare global {
   interface Window {
     __tagManagerMode?: boolean;
+    __comicReaderMode?: boolean;
     electronAPI: {
       loadData: () => Promise<AppData>;
       saveData: (data: AppData) => Promise<{ ok: boolean; error?: string }>;
       saveTags: (categories: string[], tags: Tag[]) => Promise<{ ok: boolean; error?: string }>;
       onTagsChanged: (callback: () => void) => () => void;
       openTagManager: () => Promise<{ ok: boolean }>;
+      openComicReader: (seriesId: string) => Promise<{ ok: boolean; error?: string }>;
+      onComicReaderNavigate: (callback: (seriesId: string) => void) => () => void;
       pickFolder: () => Promise<string | null>;
       pickFiles: () => Promise<string[]>;
       pickImage: () => Promise<string | null>;
@@ -39,6 +42,10 @@ declare global {
         folderPath: string,
         filePaths: string[]
       ) => Promise<{ ok: boolean; moved?: MovedFile[]; error?: string }>;
+      moveSeriesMembersOut: (
+        folderPath: string,
+        filePaths: string[]
+      ) => Promise<{ ok: boolean; moved?: MovedFile[]; error?: string }>;
       renameSeriesFolder: (
         folderPath: string,
         newTitle: string
@@ -46,6 +53,14 @@ declare global {
       dissolveSeriesFolder: (
         folderPath: string
       ) => Promise<{ ok: boolean; moved?: MovedFile[]; error?: string }>;
+      moveSeriesFolderInto: (
+        folderPath: string,
+        targetParentFolder: string
+      ) => Promise<{ ok: boolean; newFolderPath?: string; title?: string; moved?: MovedFile[]; error?: string }>;
+      moveSeriesFolderOut: (
+        folderPath: string,
+        parentFolderPath: string
+      ) => Promise<{ ok: boolean; newFolderPath?: string; title?: string; moved?: MovedFile[]; error?: string }>;
       ensureFolder: (folder: string) => Promise<{ ok: boolean; error?: string }>;
       importFiles: (sources: string[], targetFolder: string) => Promise<string[]>;
       deleteFile: (filePath: string) => Promise<{ ok: boolean; error?: string }>;

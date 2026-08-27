@@ -1,5 +1,5 @@
 import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
-import { ArrowLeft20Regular, BookOpen20Regular, Home20Regular, SelectAllOff20Regular, Tag20Regular, TagMultiple20Regular } from '@fluentui/react-icons';
+import { ArrowLeft20Regular, BookOpen20Regular, DismissCircle20Regular, Home20Regular, SelectAllOff20Regular, Tag20Regular, TagMultiple20Regular } from '@fluentui/react-icons';
 import { useMemo, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -7,14 +7,16 @@ import {
   addSubSeries,
   addTagToMediaBatch,
   createSeries,
+  removeSeriesMember,
+  removeSubSeries,
   setMediaPaths,
   setMediaRestrictedBatch,
+  updateSeries,
 } from '../store/dataSlice';
 import {
   clearTagFilter,
   clearSelectedIds,
   clearSeriesView,
-  setComicReaderSeries,
   setSelectedIds,
   setSelectedMedia,
   setSelectedSeries,
@@ -27,6 +29,7 @@ import { SeriesCard } from './SeriesCard';
 import { TagBrowser } from './TagBrowser';
 import { SeriesTitleDialog } from './SeriesTitleDialog';
 import { BatchTagDialog } from './BatchTagDialog';
+import { moveMediaOutOfSeries, moveSubSeriesInto, moveSubSeriesOut } from '../services/seriesMove';
 import {
   memberIdSet,
   memberSeriesIdSet,
@@ -307,7 +310,12 @@ function MediaGrid() {
       const mediaIds = selectedIds.filter((id) => media.some((m) => m.id === id));
       const seriesIds = selectedIds.filter((id) => series.some((s) => s.id === id));
       if (mediaIds.length) dispatch(addSeriesMembers({ id: seriesTarget, memberIds: mediaIds }));
-      if (seriesIds.length) dispatch(addSubSeries({ id: seriesTarget, seriesIds }));
+      if (seriesIds.length) {
+        if (targetSeries?.folderPath) {
+          await moveSubSeriesInto(targetSeries.folderPath, seriesIds, dispatch);
+        }
+        dispatch(addSubSeries({ id: seriesTarget, seriesIds }));
+      }
       dispatch(setSelectionMode(false));
       dispatch(setSelectedSeries(seriesTarget));
       return;
@@ -360,6 +368,9 @@ function MediaGrid() {
     );
     if (res.folderPath) {
       void window.electronAPI.markSeriesFolder(res.folderPath, action.payload.id);
+      if (seriesIds.length) {
+        await moveSubSeriesInto(res.folderPath, seriesIds, dispatch);
+      }
     }
     dispatch(setSelectionMode(false));
     dispatch(setSelectedSeries(action.payload.id));
@@ -374,6 +385,26 @@ function MediaGrid() {
       dispatch(addTagToMediaBatch({ ids: batchTargetIds, tagIds }));
     }
     dispatch(setMediaRestrictedBatch({ ids: batchTargetIds, restricted }));
+  };
+
+  const handleRemoveFromSeries = () => {
+    if (!viewingSeries) return;
+    const mediaIds = selectedIds.filter((id) => viewingSeries.memberIds.includes(id));
+    const seriesIds = selectedIds.filter((id) => (viewingSeries.memberSeriesIds ?? []).includes(id));
+    if (viewingSeries.folderPath && mediaIds.length) {
+      void moveMediaOutOfSeries(viewingSeries.folderPath, mediaIds, dispatch);
+    }
+    for (const mid of mediaIds) {
+      dispatch(removeSeriesMember({ id: viewingSeries.id, memberId: mid }));
+    }
+    for (const sid of seriesIds) {
+      const sub = series.find((s) => s.id === sid);
+      if (sub && viewingSeries.folderPath) {
+        void moveSubSeriesOut(viewingSeries.folderPath, sub, dispatch);
+      }
+      dispatch(removeSubSeries({ id: viewingSeries.id, seriesId: sid }));
+    }
+    dispatch(clearSelectedIds());
   };
 
   return (
@@ -405,7 +436,7 @@ function MediaGrid() {
             appearance="primary"
             size="small"
             icon={<BookOpen20Regular />}
-            onClick={() => dispatch(setComicReaderSeries(viewingSeries.id))}
+            onClick={() => void window.electronAPI.openComicReader(viewingSeries.id)}
           >
             漫画阅读
           </Button>
@@ -463,6 +494,16 @@ function MediaGrid() {
                 >
                   加标签 ({batchTargetIds.length})
                 </Button>
+                {viewingSeries && (
+                  <Button
+                    size="small"
+                    appearance="outline"
+                    icon={<DismissCircle20Regular />}
+                    onClick={handleRemoveFromSeries}
+                  >
+                    从系列移除
+                  </Button>
+                )}
               </>
             )}
             <Button size="small" appearance="subtle" onClick={() => dispatch(clearSelectedIds())}>

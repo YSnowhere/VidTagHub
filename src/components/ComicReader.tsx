@@ -107,6 +107,7 @@ export function ComicReader() {
   const series = useAppSelector((s) => s.data.series.find((x) => x.id === seriesId));
   const allSeries = useAppSelector((s) => s.data.series);
   const media = useAppSelector((s) => s.data.media);
+  const hydrated = useAppSelector((s) => s.ui.hydrated);
   const styles = useStyles();
 
   const [mode, setMode] = useState<ReaderMode>('page');
@@ -119,6 +120,15 @@ export function ComicReader() {
   const imgRefs = useRef<(HTMLImageElement | null)[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
 
   const pages = useMemo<MediaItem[]>(
     () =>
@@ -155,8 +165,14 @@ export function ComicReader() {
   }, [seriesId]);
 
   useEffect(() => {
-    if (seriesId && !series) dispatch(clearComicReader());
-  }, [seriesId, series, dispatch]);
+    if (!hydrated || !seriesId) return;
+    if (series) return;
+    if (window.__comicReaderMode) {
+      window.close();
+    } else {
+      dispatch(clearComicReader());
+    }
+  }, [seriesId, series, hydrated, dispatch]);
 
   useEffect(() => {
     setNaturalSize(null);
@@ -200,7 +216,8 @@ export function ComicReader() {
     if (!seriesId) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        dispatch(clearComicReader());
+        if (window.__comicReaderMode) window.close();
+        else dispatch(clearComicReader());
         return;
       }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
@@ -218,7 +235,7 @@ export function ComicReader() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [seriesId, currentPage, mode, pages.length]);
+  }, [seriesId, currentPage, mode, pages.length, dispatch]);
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -253,6 +270,10 @@ export function ComicReader() {
   }, [mode]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     if (mode !== 'page' || zoom > 1.001) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -284,6 +305,46 @@ export function ComicReader() {
     setCurrentPage(best);
   };
 
+  // 放大后直接用鼠标左键拖拽平移画面
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if (zoom <= 1.001) return;
+    const el = e.currentTarget;
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollLeft: el.scrollLeft,
+      scrollTop: el.scrollTop,
+      moved: false,
+    };
+    suppressClickRef.current = false;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true;
+    const el = e.currentTarget;
+    el.scrollLeft = d.scrollLeft - dx;
+    el.scrollTop = d.scrollTop - dy;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    dragRef.current = null;
+    if (d.moved) suppressClickRef.current = true;
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
+  };
+
   if (!seriesId || !series) return null;
 
   const current = pages[currentPage];
@@ -300,7 +361,10 @@ export function ComicReader() {
           size="small"
           appearance="subtle"
           title="关闭 (Esc)"
-          onClick={() => dispatch(clearComicReader())}
+          onClick={() => {
+            if (window.__comicReaderMode) window.close();
+            else dispatch(clearComicReader());
+          }}
         />
         <Text className={styles.title} size={300} weight="semibold" title={series.title}>
           {series.title}
@@ -336,7 +400,15 @@ export function ComicReader() {
       </div>
 
       {mode === 'page' ? (
-        <div className={styles.canvas} ref={canvasRef} onClick={handleCanvasClick}>
+        <div
+          className={styles.canvas}
+          ref={canvasRef}
+          onClick={handleCanvasClick}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+        >
           {current &&
             (naturalSize ? (
               <div className={styles.pageWrapFit} style={{ width: dispW, height: dispH }}>
@@ -368,7 +440,15 @@ export function ComicReader() {
             ))}
         </div>
       ) : (
-        <div className={styles.scrollArea} ref={scrollAreaRef} onScroll={handleScroll}>
+        <div
+          className={styles.scrollArea}
+          ref={scrollAreaRef}
+          onScroll={handleScroll}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+        >
           {pages.map((m, i) => (
             <div key={m.id} className={styles.scrollItem}>
               <img

@@ -11,6 +11,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openTagManager: () => ipcRenderer.invoke('window:openTagManager'),
+  openComicReader: (seriesId: string) => ipcRenderer.invoke('reader:open', seriesId),
+  onComicReaderNavigate: (callback: (seriesId: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, seriesId: string) => callback(seriesId);
+    ipcRenderer.on('reader:navigate', handler);
+    return () => {
+      ipcRenderer.removeListener('reader:navigate', handler);
+    };
+  },
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   pickFiles: () => ipcRenderer.invoke('dialog:pickFiles'),
   pickImage: () => ipcRenderer.invoke('dialog:pickImage'),
@@ -26,10 +34,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ) => ipcRenderer.invoke('series:migrateLegacy', libraryPath, seriesList),
   moveSeriesMembers: (folderPath: string, filePaths: string[]) =>
     ipcRenderer.invoke('series:moveMembers', folderPath, filePaths),
+  moveSeriesMembersOut: (folderPath: string, filePaths: string[]) =>
+    ipcRenderer.invoke('series:moveMembersOut', folderPath, filePaths),
   renameSeriesFolder: (folderPath: string, newTitle: string) =>
     ipcRenderer.invoke('series:renameFolder', folderPath, newTitle),
   dissolveSeriesFolder: (folderPath: string) =>
     ipcRenderer.invoke('series:dissolveFolder', folderPath),
+  moveSeriesFolderInto: (folderPath: string, targetParentFolder: string) =>
+    ipcRenderer.invoke('series:moveFolderInto', folderPath, targetParentFolder),
+  moveSeriesFolderOut: (folderPath: string, parentFolderPath: string) =>
+    ipcRenderer.invoke('series:moveFolderOut', folderPath, parentFolderPath),
   ensureFolder: (folder: string) => ipcRenderer.invoke('folder:ensure', folder),
   importFiles: (sources: string[], targetFolder: string) =>
     ipcRenderer.invoke('file:importFiles', sources, targetFolder),

@@ -6,7 +6,7 @@ import { MainArea } from './components/MainArea';
 import { DetailPanel } from './components/DetailPanel';
 import { LibraryDialog } from './components/LibraryDialog';
 import { SettingsDialog } from './components/SettingsDialog';
-import { ComicReader } from './components/ComicReader';
+import { ComicReaderPage } from './components/ComicReaderPage';
 import { TagManagerPage } from './components/TagManagerPage';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import { hydrate, hydrateTags } from './store/dataSlice';
@@ -37,6 +37,7 @@ export default function App() {
   const rememberNSFW = useAppSelector((s) => s.ui.rememberNSFW);
 
   const isTagManager = new URLSearchParams(window.location.search).get('page') === 'tagmanager';
+  const isComicReader = new URLSearchParams(window.location.search).get('page') === 'comicreader';
 
   useEffect(() => {
     try {
@@ -73,7 +74,7 @@ export default function App() {
   }, [showNSFW, dispatch]);
 
   useEffect(() => {
-    if (!window.electronAPI) return;
+    if (!window.electronAPI || isComicReader) return;
     (async () => {
       const data = await window.electronAPI.loadData();
       dispatch(hydrate(data));
@@ -86,10 +87,10 @@ export default function App() {
       }
       dispatch(setHydrated(true));
     })();
-  }, [dispatch, isTagManager]);
+  }, [dispatch, isTagManager, isComicReader]);
 
   useEffect(() => {
-    if (isTagManager || !window.electronAPI) return;
+    if (isTagManager || isComicReader || !window.electronAPI) return;
     const handler = () => {
       void window.electronAPI.loadData().then((data) => {
         dispatch(hydrateTags({ categories: data.categories, tags: data.tags }));
@@ -97,10 +98,14 @@ export default function App() {
     };
     const off = window.electronAPI.onTagsChanged(handler);
     return off;
-  }, [dispatch, isTagManager]);
+  }, [dispatch, isTagManager, isComicReader]);
 
   if (isTagManager) {
     return <TagManagerPage />;
+  }
+
+  if (isComicReader) {
+    return <ComicReaderPage />;
   }
 
   return (
@@ -113,7 +118,6 @@ export default function App() {
       </div>
       <LibraryDialog />
       <SettingsDialog />
-      <ComicReader />
     </div>
   );
 }

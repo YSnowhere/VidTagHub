@@ -1,7 +1,7 @@
-import { Badge, Button, Text, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Button, Checkbox, Text, makeStyles, tokens } from '@fluentui/react-components';
 import { Collections20Regular, Open20Regular, BookOpen20Regular } from '@fluentui/react-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { setSelectedSeries, setSeriesView, setComicReaderSeries, setView } from '../store/uiSlice';
+import { setSelectedSeries, setSeriesView, toggleSelectedId, setView } from '../store/uiSlice';
 import { previewUrl } from '../services/format';
 import { seriesEffectiveTags, seriesTypeText, isPureImageSeries, seriesSubSeriesCount } from '../services/series';
 import { visibleTags } from '../services/tags';
@@ -63,6 +63,13 @@ const useStyles = makeStyles({
     opacity: 1,
     pointerEvents: 'auto',
   },
+  selectBox: {
+    position: 'absolute',
+    right: '6px',
+    top: '6px',
+    background: tokens.colorNeutralBackground1,
+    borderRadius: tokens.borderRadiusSmall,
+  },
   info: {
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
     display: 'flex',
@@ -89,6 +96,8 @@ interface Props {
 export function SeriesCard({ series }: Props) {
   const dispatch = useAppDispatch();
   const selectedSeriesId = useAppSelector((s) => s.ui.selectedSeriesId);
+  const selectionMode = useAppSelector((s) => s.ui.selectionMode);
+  const selectedIds = useAppSelector((s) => s.ui.selectedIds);
   const tags = useAppSelector((s) => s.data.tags);
   const allSeries = useAppSelector((s) => s.data.series);
   const media = useAppSelector((s) => s.data.media);
@@ -102,10 +111,19 @@ export function SeriesCard({ series }: Props) {
     showNSFW
   );
   const selected = selectedSeriesId === series.id;
+  const isChecked = selectedIds.includes(series.id);
   const memberCount = series.memberIds.length + seriesSubSeriesCount(series);
   const typeText = seriesTypeText(series, allSeries, media);
   const pureImages = isPureImageSeries(series, allSeries, media);
   const subCount = seriesSubSeriesCount(series);
+
+  const handleClick = () => {
+    if (selectionMode) {
+      dispatch(toggleSelectedId(series.id));
+    } else {
+      dispatch(setSelectedSeries(series.id));
+    }
+  };
 
   const openSeries = () => {
     dispatch(setSelectedSeries(series.id));
@@ -117,13 +135,13 @@ export function SeriesCard({ series }: Props) {
     dispatch(setSelectedSeries(series.id));
     dispatch(setSeriesView(series.id));
     dispatch(setView('media'));
-    dispatch(setComicReaderSeries(series.id));
+    void window.electronAPI.openComicReader(series.id);
   };
 
   return (
     <div
-      className={`${styles.card} ${selected ? styles.cardSelected : ''}`}
-      onClick={() => dispatch(setSelectedSeries(series.id))}
+      className={`${styles.card} ${selected || isChecked ? styles.cardSelected : ''}`}
+      onClick={handleClick}
       title={series.title}
     >
       <div className={styles.cover}>
@@ -145,6 +163,16 @@ export function SeriesCard({ series }: Props) {
         >
           {typeText}
         </Badge>
+        {selectionMode && (
+          <div className={styles.selectBox}>
+            <Checkbox
+              checked={isChecked}
+              onChange={() => dispatch(toggleSelectedId(series.id))}
+              onClick={(e) => e.stopPropagation()}
+              aria-label="选择"
+            />
+          </div>
+        )}
         <div className={`${styles.coverActions} ${selected ? styles.cardHoverActions : ''}`}>
           {pureImages && (
             <Button

@@ -41,28 +41,50 @@ export function seriesTreeMembers(s: Series, allSeries: Series[], media: MediaIt
   return result;
 }
 
-export function seriesEffectiveTags(s: Series, allSeries: Series[], media: MediaItem[]): string[] {
-  const set = new Set<string>();
-  for (const m of seriesTreeMembers(s, allSeries, media)) {
-    for (const t of m.tags) set.add(t);
+/** 系列成员不再支持单独添加标签，标签与类型属于系列本身（全系列共享） */
+export function seriesContainingMedia(m: MediaItem, allSeries: Series[], media: MediaItem[]): Series | undefined {
+  for (const s of allSeries) {
+    if (seriesTreeMembers(s, allSeries, media).some((x) => x.id === m.id)) return s;
   }
-  return Array.from(set);
+  return undefined;
+}
+
+/** 系列的标签属于系列本身，只返回直接设置在系列上的标签，不再汇总成员文件的标签 */
+export function seriesEffectiveTags(s: Series, _allSeries: Series[], _media: MediaItem[]): string[] {
+  return Array.from(s.tags ?? []);
+}
+
+/** 该系列是否处于「漫画」模式（纯图片系列隐藏细分、不入 JSON、直接阅读） */
+export function isComicSeries(s: Series): boolean {
+  return s.mode === 'comic';
+}
+
+/** 漫画叶子：漫画模式下没有子系列，展开无意义，卡片以「漫画阅读」为主入口 */
+export function isComicLeaf(s: Series): boolean {
+  return s.mode === 'comic' && (s.memberSeriesIds?.length ?? 0) === 0;
 }
 
 export function seriesEffectiveRestricted(s: Series, allSeries: Series[], media: MediaItem[]): boolean {
   return s.restricted || seriesTreeMembers(s, allSeries, media).some((m) => m.restricted);
 }
 
-export function seriesTypeText(s: Series, allSeries: Series[], media: MediaItem[]): string {
+/** 类型徽章文案：漫画模式显示「漫画」；同为一种文件显示文件类型；混合型（如图片+视频）显示「系列」 */
+export function seriesTypeLabel(s: Series, allSeries: Series[], media: MediaItem[]): string {
+  if (isComicSeries(s)) return '漫画';
   const members = seriesTreeMembers(s, allSeries, media);
-  const hasVideo = members.some((m) => m.type === 'video');
-  const hasImage = members.some((m) => m.type === 'image');
-  const hasPdf = members.some((m) => m.type === 'pdf');
-  const parts: string[] = [];
-  if (hasVideo) parts.push('视频');
-  if (hasImage) parts.push('图片');
-  if (hasPdf) parts.push('PDF');
-  return parts.length > 0 ? parts.join(' / ') : '系列';
+  if (members.length === 0) return '系列';
+  const kinds = new Set(members.map((m) => m.type));
+  if (kinds.size === 1) {
+    if (kinds.has('image')) return '图片';
+    if (kinds.has('video')) return '视频';
+    return 'PDF';
+  }
+  return '系列';
+}
+
+/** 一级系列：不是任何其他系列的子系列（漫画/图片模式只能在顶级系列详情修改） */
+export function isTopLevelSeries(s: Series, allSeries: Series[]): boolean {
+  return !allSeries.some((x) => x.id !== s.id && (x.memberSeriesIds ?? []).includes(s.id));
 }
 
 export function seriesTotalSize(s: Series, allSeries: Series[], media: MediaItem[]): number {

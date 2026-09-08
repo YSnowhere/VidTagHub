@@ -6,7 +6,7 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  Field,
+  Divider,
   Switch,
   Text,
 } from '@fluentui/react-components';
@@ -56,60 +56,63 @@ export function SettingsDialog() {
           <DialogTitle>设置</DialogTitle>
           <DialogContent>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <Field label="限制内容">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text size={300}>显示 NSFW 内容</Text>
-                    <Switch
-                      checked={showNSFW}
-                      onChange={(_, data) => {
-                        dispatch(setShowNSFW(!!data.checked));
-                        if (!data.checked) dispatch(setOnlyNSFW(false));
-                      }}
-                      label="显示"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text size={300}>只显示 NSFW 内容</Text>
-                    <Switch
-                      checked={onlyNSFW}
-                      onChange={(_, data) => {
-                        if (data.checked) {
-                          dispatch(setShowNSFW(true));
-                          dispatch(setOnlyNSFW(true));
-                        } else {
-                          dispatch(setOnlyNSFW(false));
-                        }
-                      }}
-                      label="显示"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text size={300}>记住我的选择</Text>
-                    <Switch
-                      checked={rememberNSFW}
-                      onChange={(_, data) => dispatch(setRememberNSFW(!!data.checked))}
-                      label="确定"
-                    />
-                  </div>
+              <Text weight="semibold" size={400}>
+                限制内容
+              </Text>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text size={300}>显示 NSFW 内容</Text>
+                  <Switch
+                    checked={showNSFW}
+                    onChange={(_, data) => {
+                      dispatch(setShowNSFW(!!data.checked));
+                      if (!data.checked) dispatch(setOnlyNSFW(false));
+                    }}
+                    label="显示"
+                  />
                 </div>
-              </Field>
-              <Field label="缓存管理">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text size={300}>全部软件数据</Text>
-                    <Button size="small" onClick={() => void handleMigrateData()}>
-                      迁移数据文件
-                    </Button>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text size={300}>缩略图缓存</Text>
-                    <Button size="small" onClick={() => void handleClearCache()}>
-                      清除缓存文件
-                    </Button>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text size={300}>只显示 NSFW 内容</Text>
+                  <Switch
+                    checked={onlyNSFW}
+                    onChange={(_, data) => {
+                      if (data.checked) {
+                        dispatch(setShowNSFW(true));
+                        dispatch(setOnlyNSFW(true));
+                      } else {
+                        dispatch(setOnlyNSFW(false));
+                      }
+                    }}
+                    label="显示"
+                  />
                 </div>
-              </Field>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text size={300}>记住我的选择</Text>
+                  <Switch
+                    checked={rememberNSFW}
+                    onChange={(_, data) => dispatch(setRememberNSFW(!!data.checked))}
+                    label="确定"
+                  />
+                </div>
+              </div>
+              <Divider />
+              <Text weight="semibold" size={400}>
+                缓存管理
+              </Text>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text size={300}>全部软件数据</Text>
+                  <Button size="small" onClick={() => void handleMigrateData()}>
+                    迁移数据文件
+                  </Button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text size={300}>缩略图缓存</Text>
+                  <Button size="small" onClick={() => void handleClearCache()}>
+                    清除缓存文件
+                  </Button>
+                </div>
+              </div>
               {notice && (
                 <Text size={200} style={{ color: '#107c10' }}>
                   {notice}

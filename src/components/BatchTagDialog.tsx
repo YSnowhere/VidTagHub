@@ -18,7 +18,6 @@ import { useAppSelector } from '../store/hooks';
 
 interface Props {
   open: boolean;
-  targetCount: number;
   onConfirm: (tagIds: string[], restricted: boolean) => void;
   onClose: () => void;
 }
@@ -49,7 +48,7 @@ const useStyles = makeStyles({
   },
 });
 
-export function BatchTagDialog({ open, targetCount, onConfirm, onClose }: Props) {
+export function BatchTagDialog({ open, onConfirm, onClose }: Props) {
   const categories = useAppSelector((s) => s.data.categories);
   const allTags = useAppSelector((s) => s.data.tags);
   const styles = useStyles();
@@ -86,10 +85,7 @@ export function BatchTagDialog({ open, targetCount, onConfirm, onClose }: Props)
         <DialogBody>
           <DialogTitle>批量添加标签</DialogTitle>
           <DialogContent>
-            <Text size={300} weight="semibold">
-              将所选标签添加到 {targetCount} 个媒体
-            </Text>
-            <Text size={200} style={{ color: tokens.colorNeutralForeground3, display: 'block', marginTop: 4 }}>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3, display: 'block' }}>
               勾选需要添加的标签，未勾选的标签保持不变（含 NSFW 标签）
             </Text>
 

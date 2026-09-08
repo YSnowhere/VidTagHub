@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, shell } from 'electron';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
@@ -49,6 +49,13 @@ interface Series {
   memberIds: string[];
   memberSeriesIds?: string[];
   folderPath?: string;
+  /** 纯图片系列的展示模式：漫画（隐藏细分、不入 JSON）或图片（原始图库行为） */
+  mode?: 'comic' | 'image';
+}
+
+interface SeriesFolderData {
+  id?: string;
+  media?: MediaItem[];
 }
 
 interface AppData {
@@ -191,36 +198,70 @@ function saveGlobal(global: GlobalData): void {
   fs.writeFileSync(globalFile(), JSON.stringify(global, null, 2), 'utf-8');
 }
 
-function movePath(from: string, to: string, log?: MovedFile[]): void {
+/** 把文件或目录从 from 移动到 to（to 不能位于 from 内部）。优先原子重命名，失败才回退到逐文件复制。
+ *  只有某个文件成功复制后才删除源文件；失败项留在源目录，绝不静默丢失数据。 */
+function movePath(from: string, to: string, log?: MovedFile[]): boolean {
   const rel = path.relative(path.resolve(from), path.resolve(to));
   if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
-    return; // 目标位于源目录内部或相同，禁止移动，避免无限递归
+    return false; // 目标位于源目录内部或相同，禁止移动，避免无限递归
+  }
+  try {
+    // 整目录/整文件原子重命名：同一分区内不会丢数据
+    fs.renameSync(from, to);
+    if (log) logMovedTree(from, to, log);
+    return true;
+  } catch {
+    // 跨分区(EXDEV)或其它原因 → 回退为逐文件复制
   }
   const st = fs.statSync(from);
   if (st.isDirectory()) {
     fs.mkdirSync(to, { recursive: true });
+    let okAll = true;
     for (const e of fs.readdirSync(from)) {
+      const childOk = movePath(path.join(from, e), path.join(to, e), log);
+      if (!childOk) okAll = false;
+    }
+    if (okAll) {
       try {
-        movePath(path.join(from, e), path.join(to, e), log);
+        fs.rmdirSync(from);
       } catch {
-        /* 单个文件失败继续 */
+        /* ignore */
       }
     }
-    try {
-      fs.rmdirSync(from);
-    } catch {
-      /* ignore */
-    }
+    return okAll;
   } else {
     try {
-      if (fs.existsSync(to)) fs.rmSync(to, { force: true });
+      if (fs.existsSync(to)) return false; // 不覆盖既有目标，避免误删
       fs.copyFileSync(from, to);
       fs.rmSync(from, { force: true });
       log?.push({ from, to });
+      return true;
     } catch {
-      /* ignore */
+      return false;
     }
   }
+}
+
+/** 目录被整体重命名后，把其中每个文件都记入移动日志（按相对路径反推旧路径） */
+function logMovedTree(from: string, to: string, log: MovedFile[]): void {
+  const walk = (dir: string): void => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile()) {
+        const rel = path.relative(to, full);
+        log.push({ from: path.join(from, rel), to: full });
+      }
+    }
+  };
+  walk(to);
 }
 
 function moveSeriesFolder(
@@ -271,23 +312,108 @@ function loadTags(): TagData {
 }
 
 function loadLibraryFile(libPath: string): LibraryFile {
+  let parsed: LibraryFile;
   try {
-    const parsed = JSON.parse(fs.readFileSync(libraryDataFile(libPath), 'utf-8')) as LibraryFile;
-    return {
-      media: (parsed.media ?? []).map((m) => ({
-        ...m,
-        filePath: resolveStoredPath(libPath, m.filePath),
-        ...(m.coverPath ? { coverPath: resolveStoredPath(libPath, m.coverPath) } : {}),
-      })),
-      series: (parsed.series ?? []).map((s) => ({
-        ...s,
-        ...(s.coverPath ? { coverPath: resolveStoredPath(libPath, s.coverPath) } : {}),
-        ...(s.folderPath ? { folderPath: resolveStoredPath(libPath, s.folderPath) } : {}),
-      })),
-    };
+    parsed = JSON.parse(fs.readFileSync(libraryDataFile(libPath), 'utf-8')) as LibraryFile;
   } catch {
     return { media: [], series: [] };
   }
+
+  const mediaById = new Map<string, MediaItem>();
+  const addMedia = (m: MediaItem): void => {
+    if (!mediaById.has(m.id)) mediaById.set(m.id, m);
+  };
+
+  for (const m of parsed.media ?? []) {
+    addMedia({
+      ...m,
+      filePath: resolveStoredPath(libPath, m.filePath),
+      ...(m.coverPath ? { coverPath: resolveStoredPath(libPath, m.coverPath) } : {}),
+    });
+  }
+
+  const series: Series[] = (parsed.series ?? []).map((s) => ({
+    ...s,
+    mode: s.mode,
+    ...(s.coverPath ? { coverPath: resolveStoredPath(libPath, s.coverPath) } : {}),
+    ...(s.folderPath ? { folderPath: resolveStoredPath(libPath, s.folderPath) } : {}),
+  }));
+
+  // 1) 读取各系列文件夹数据文件（新格式：具体媒体信息存放在系列文件夹内）
+  for (const s of series) {
+    if (!s.folderPath) continue;
+    const fd = readSeriesFolderData(s.folderPath);
+    if (fd?.media?.length) {
+      for (const m of fd.media) {
+        addMedia({
+          ...m,
+          filePath: resolveStoredPath(libPath, m.filePath),
+          ...(m.coverPath ? { coverPath: resolveStoredPath(libPath, m.coverPath) } : {}),
+        });
+      }
+    }
+  }
+
+  // 2) 迁移：旧数据没有 mode 字段，纯图片系列默认按「漫画」处理，
+  //    并把成员图片的受限标记合并到系列本身，避免 NSFW 信息丢失（标签属于系列本身，不再合并）
+  const isPureImageTree = (s: Series, visited: Set<string>): boolean => {
+    if (visited.has(s.id)) return false;
+    visited.add(s.id);
+    const members = s.memberIds
+      .map((id) => mediaById.get(id))
+      .filter((m): m is MediaItem => Boolean(m));
+    if (members.length === 0 && (s.memberSeriesIds?.length ?? 0) === 0) return false;
+    if (members.some((m) => m.type !== 'image')) return false;
+    for (const sid of s.memberSeriesIds ?? []) {
+      const sub = series.find((x) => x.id === sid);
+      if (!sub || !isPureImageTree(sub, visited)) return false;
+    }
+    return true;
+  };
+
+  for (const s of series) {
+    if (s.mode !== undefined) continue;
+    if (!isPureImageTree(s, new Set())) continue;
+    const treeMembers = collectTreeMembers(s, series, Array.from(mediaById.values()));
+    s.mode = 'comic';
+    if (treeMembers.some((m) => m.restricted)) s.restricted = true;
+  }
+
+  // 3) 漫画模式：丢弃旧 JSON 中系列文件夹内的成员媒体（不再存入 JSON），改为实时枚举
+  const oldMediaIds = new Set(mediaById.keys());
+  const protectedIds = new Set<string>();
+  for (const s of series) {
+    if (s.mode === 'comic') continue;
+    for (const id of s.memberIds) protectedIds.add(id);
+  }
+  for (const s of series) {
+    if (s.mode !== 'comic' || !s.folderPath) continue;
+    const folder = normPath(s.folderPath);
+    for (const id of oldMediaIds) {
+      if (protectedIds.has(id)) continue;
+      const m = mediaById.get(id);
+      if (!m) continue;
+      const p = normPath(m.filePath);
+      if (p === folder || p.startsWith(folder + '/')) mediaById.delete(id);
+    }
+    const ephemeral: MediaItem[] = listMediaInFolder(s.folderPath).map((r) => ({
+      id: randomId(),
+      libraryId: s.libraryId,
+      filePath: r.filePath,
+      fileName: r.fileName,
+      type: r.type,
+      size: r.size,
+      modifiedAt: r.modifiedAt,
+      tags: [],
+      description: '',
+      createdAt: Date.now(),
+      restricted: false,
+    }));
+    s.memberIds = ephemeral.map((m) => m.id);
+    for (const m of ephemeral) addMedia(m);
+  }
+
+  return { media: Array.from(mediaById.values()), series };
 }
 
 function loadData(): AppData {
@@ -331,25 +457,54 @@ function saveData(data: AppData): void {
   for (const lib of data.libraries) {
     try {
       if (!fs.existsSync(lib.path)) continue; // 文件夹已被移动或删除，跳过保存
-      const libData = {
-        libraryId: lib.id,
-        libraryName: lib.name,
-        media: data.media
-          .filter((m) => m.libraryId === lib.id)
-          .map((m) => ({
-            ...m,
-            filePath: toRelativePath(lib.path, m.filePath),
-            ...(m.coverPath ? { coverPath: toRelativePath(lib.path, m.coverPath) } : {}),
-          })),
-        series: data.series
-          .filter((s) => s.libraryId === lib.id)
-          .map((s) => ({
-            ...s,
-            ...(s.coverPath ? { coverPath: toRelativePath(lib.path, s.coverPath) } : {}),
-            ...(s.folderPath ? { folderPath: toRelativePath(lib.path, s.folderPath) } : {}),
-          })),
-      };
-      fs.writeFileSync(libraryDataFile(lib.path), JSON.stringify(libData, null, 2), 'utf-8');
+      const libMedia = data.media.filter((m) => m.libraryId === lib.id);
+      const libSeries = data.series.filter((s) => s.libraryId === lib.id);
+      const serializeMedia = (m: MediaItem): MediaItem => ({
+        ...m,
+        filePath: toRelativePath(lib.path, m.filePath),
+        ...(m.coverPath ? { coverPath: toRelativePath(lib.path, m.coverPath) } : {}),
+      });
+
+      // 主 JSON 只保留系列条目；具体媒体信息放入各系列文件夹
+      const folderSeries = libSeries.filter((s) => s.folderPath);
+      const folderMemberIds = new Set<string>();
+      for (const s of folderSeries) for (const id of s.memberIds) folderMemberIds.add(id);
+
+      const mainMedia = libMedia
+        .filter((m) => !folderMemberIds.has(m.id))
+        .map(serializeMedia);
+
+      const mainSeries = libSeries.map((s) => ({
+        ...s,
+        ...(s.mode === 'comic' ? { memberIds: [] } : {}), // 漫画模式不持久化成员
+        ...(s.coverPath ? { coverPath: toRelativePath(lib.path, s.coverPath) } : {}),
+        ...(s.folderPath ? { folderPath: toRelativePath(lib.path, s.folderPath) } : {}),
+      }));
+
+      // 各系列文件夹数据文件：保留具体媒体信息（漫画模式只留标记）
+      for (const s of libSeries) {
+        if (!s.folderPath) continue;
+        try {
+          if (!fs.existsSync(s.folderPath)) continue;
+          const payload: SeriesFolderData =
+            s.mode === 'comic'
+              ? { id: s.id }
+              : { id: s.id, media: libMedia.filter((m) => s.memberIds.includes(m.id)).map(serializeMedia) };
+          fs.writeFileSync(seriesMarkerFile(s.folderPath), JSON.stringify(payload, null, 2), 'utf-8');
+        } catch {
+          /* 单个系列文件夹不可用，忽略 */
+        }
+      }
+
+      fs.writeFileSync(
+        libraryDataFile(lib.path),
+        JSON.stringify(
+          { libraryId: lib.id, libraryName: lib.name, media: mainMedia, series: mainSeries },
+          null,
+          2
+        ),
+        'utf-8'
+      );
     } catch {
       /* 文件夹可能不可用，忽略 */
     }
@@ -386,6 +541,42 @@ function readSeriesMarker(folderPath: string): { id?: string } | null {
   }
 }
 
+/** 读取系列文件夹数据文件（标记 id + 可选的具体媒体信息） */
+function readSeriesFolderData(folderPath: string): SeriesFolderData | null {
+  try {
+    if (!fs.existsSync(seriesMarkerFile(folderPath))) return null;
+    return JSON.parse(fs.readFileSync(seriesMarkerFile(folderPath), 'utf-8')) as SeriesFolderData;
+  } catch {
+    return null;
+  }
+}
+
+/** 计算某个系列（含后代系列）的全部媒体成员 */
+function collectTreeMembers(s: Series, allSeries: Series[], media: MediaItem[]): MediaItem[] {
+  const result: MediaItem[] = [];
+  const visited = new Set<string>();
+  const visit = (cur: Series): void => {
+    if (visited.has(cur.id)) return;
+    visited.add(cur.id);
+    for (const id of cur.memberIds) {
+      const m = media.find((x) => x.id === id);
+      if (m) result.push(m);
+    }
+    for (const sid of cur.memberSeriesIds ?? []) {
+      const sub = allSeries.find((x) => x.id === sid);
+      if (sub) visit(sub);
+    }
+  };
+  visit(s);
+  return result;
+}
+
+const normPath = (p: string): string => p.replace(/[\\/]+/g, '/').toLowerCase();
+
+function randomId(): string {
+  return randomUUID().replace(/-/g, '');
+}
+
 function pushScanResult(media: ScanResult[], full: string, entryName: string): void {
   const ext = path.extname(entryName).toLowerCase();
   const type: MediaType | null = VIDEO_EXTS.includes(ext)
@@ -409,6 +600,23 @@ function pushScanResult(media: ScanResult[], full: string, entryName: string): v
     size: stat.size,
     modifiedAt: stat.mtimeMs,
   });
+}
+
+/** 枚举某个系列文件夹内直属的媒体文件（不递归子文件夹），用于漫画模式按需读取 */
+function listMediaInFolder(folderPath: string): ScanResult[] {
+  const media: ScanResult[] = [];
+  let entries;
+  try {
+    entries = fs.readdirSync(folderPath, { withFileTypes: true });
+  } catch {
+    return media;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    if (!entry.isFile()) continue;
+    pushScanResult(media, path.join(folderPath, entry.name), entry.name);
+  }
+  return media;
 }
 
 function scanFolderRecursive(folderPath: string): FolderScan {
@@ -504,36 +712,52 @@ function moveFilesIntoFolder(destFolder: string, filePaths: string[]): MovedFile
   return moved;
 }
 
-function dissolveFolder(folderPath: string): MovedFile[] {
+/** 解散系列：直属媒体文件释放到上级目录；子系列文件夹整体上移到上级（保留结构，避免散开与重名编号）。
+ *  全部成功后才删除原文件夹；任一失败则保留原文件夹，绝不误删数据。 */
+function dissolveFolder(folderPath: string): {
+  moved: MovedFile[];
+  movedFolders: { from: string; to: string }[];
+} {
   const parent = path.dirname(folderPath);
   const moved: MovedFile[] = [];
-  const walk = (dir: string): void => {
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else {
-        const r = moveFileIntoFolder(parent, full);
-        if (r) moved.push(r);
-      }
-    }
-  };
-  walk(folderPath);
+  const movedFolders: { from: string; to: string }[] = [];
+  let failed = false;
+  let entries;
   try {
-    fs.rmSync(folderPath, { recursive: true, force: true });
+    entries = fs.readdirSync(folderPath, { withFileTypes: true });
   } catch {
-    /* ignore */
+    return { moved: [], movedFolders: [] };
   }
-  return moved;
+  for (const entry of entries) {
+    // 软件自身的标记/数据文件不释放到上级，随原文件夹一并清理
+    if (entry.name === '.vision-series.json' || entry.name === '.vision-library.json') continue;
+    const full = path.join(folderPath, entry.name);
+    if (entry.isDirectory()) {
+      // 子系列文件夹整体上移到上级，保留其结构（避免内容散开与重名编号）
+      const res = moveSeriesFolder(full, parent);
+      if (res.ok && res.newFolderPath && path.resolve(res.newFolderPath) !== path.resolve(full)) {
+        if (res.moved?.length) moved.push(...res.moved);
+        movedFolders.push({ from: full, to: res.newFolderPath });
+      } else {
+        // 子系列未实际移走（仍在原文件夹内）：标记失败，避免原文件夹连同其内容被误删
+        failed = true;
+      }
+    } else {
+      const r = moveFileIntoFolder(full, parent);
+      if (r) moved.push(r);
+      else failed = true; // 单个文件移走失败：绝不递归删除该目录，避免误删数据
+    }
+  }
+  // 全部移走后，删除原文件夹（含残留标记文件/空子目录）
+  if (!failed) {
+    try {
+      fs.rmSync(folderPath, { recursive: true, force: true });
+    } catch {
+      /* 仍有内容被占用则保留 */
+    }
+  }
+  return { moved, movedFolders };
 }
-
 const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -748,6 +972,15 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.handle('series:listFolder', (_event, folderPath: string) => {
+    try {
+      if (!folderPath || !fs.existsSync(folderPath)) return [];
+      return listMediaInFolder(folderPath);
+    } catch {
+      return [];
+    }
+  });
+
   ipcMain.handle(
     'series:migrateLegacy',
     (_event, libraryPath: string, seriesList: LegacySeriesPayload[]) => {
@@ -814,10 +1047,11 @@ function registerIpc(): void {
         i++;
       }
       if (path.resolve(target) === path.resolve(folderPath)) {
-        return { ok: true, folderPath, title: name };
+        return { ok: true, folderPath, title: name, moved: [] };
       }
-      fs.renameSync(folderPath, target);
-      return { ok: true, folderPath: target, title: name };
+      const moved: MovedFile[] = [];
+      movePath(folderPath, target, moved);
+      return { ok: true, folderPath: target, title: name, moved };
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -828,8 +1062,35 @@ function registerIpc(): void {
       if (!folderPath || !fs.existsSync(folderPath)) {
         return { ok: false, error: '系列文件夹不存在' };
       }
-      const moved = dissolveFolder(folderPath);
-      return { ok: true, moved };
+      const { moved, movedFolders } = dissolveFolder(folderPath);
+      return { ok: true, moved, movedFolders };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  // 彻底删除系列文件夹（含其中所有文件），带路径保护，仅用于漫画系列删除
+  ipcMain.handle('series:deleteFolder', (_event, folderPath: string) => {
+    try {
+      if (!folderPath || !fs.existsSync(folderPath)) {
+        return { ok: false, error: '系列文件夹不存在' };
+      }
+      const lp = path.resolve(folderPath);
+      const protectedPaths = [
+        path.resolve(getDataDir()),
+        path.resolve(app.getPath('userData')),
+        path.resolve(app.getPath('home')),
+      ];
+      if (
+        protectedPaths.some((p) => {
+          const rel = path.relative(lp, p);
+          return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+        })
+      ) {
+        return { ok: false, error: '该路径受保护，无法删除' };
+      }
+      fs.rmSync(lp, { recursive: true, force: true });
+      return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err) };
     }
@@ -856,22 +1117,13 @@ function registerIpc(): void {
       const parsed = JSON.parse(fs.readFileSync(dataFile, 'utf-8')) as {
         libraryId?: string;
         libraryName?: string;
-        media?: MediaItem[];
-        series?: Series[];
       };
+      const libFile = loadLibraryFile(folder);
       return {
         libraryId: parsed.libraryId ?? null,
         libraryName: parsed.libraryName ?? null,
-        media: (parsed.media ?? []).map((m) => ({
-          ...m,
-          filePath: resolveStoredPath(folder, m.filePath),
-          ...(m.coverPath ? { coverPath: resolveStoredPath(folder, m.coverPath) } : {}),
-        })),
-        series: (parsed.series ?? []).map((s) => ({
-          ...s,
-          ...(s.coverPath ? { coverPath: resolveStoredPath(folder, s.coverPath) } : {}),
-          ...(s.folderPath ? { folderPath: resolveStoredPath(folder, s.folderPath) } : {}),
-        })),
+        media: libFile.media,
+        series: libFile.series,
       };
     } catch {
       return null;

@@ -31,6 +31,8 @@ export interface MediaItem {
   restricted: boolean;
 }
 
+export type SeriesMode = 'comic' | 'image';
+
 export interface Series {
   id: string;
   libraryId: string;
@@ -43,6 +45,8 @@ export interface Series {
   memberIds: string[];
   memberSeriesIds?: string[];
   folderPath?: string;
+  /** 纯图片系列的展示模式：漫画（隐藏细分、不入 JSON）或图片（原始图库行为） */
+  mode?: SeriesMode;
 }
 
 export interface AppData {

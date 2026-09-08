@@ -21,6 +21,7 @@ import {
   setSelectedMedia,
   setSelectedSeries,
   setSelectionMode,
+  setSeriesView,
   setTagFilter,
   setView,
 } from '../store/uiSlice';
@@ -37,7 +38,8 @@ import {
   seriesEffectiveTags,
   seriesSubSeries,
   seriesTreeMembers,
-  isPureImageSeries,
+  isComicLeaf,
+  isTopLevelSeries,
 } from '../services/series';
 import type { MediaItem, Series } from '../types';
 
@@ -48,6 +50,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     minWidth: 0,
     overflowY: 'auto',
+    scrollbarGutter: 'stable',
     background: tokens.colorNeutralBackground2,
   },
   bar: {
@@ -129,6 +132,12 @@ function MediaGrid() {
 
   const goUp = () => {
     if (viewingSeries) {
+      // 当前在子系列展开视图：返回其母系列展开视图（而非库根）
+      const parent = series.find((s) => (s.memberSeriesIds ?? []).includes(viewingSeries.id));
+      if (parent) {
+        dispatch(setSeriesView(parent.id));
+        return;
+      }
       dispatch(clearSeriesView());
       return;
     }
@@ -187,10 +196,8 @@ function MediaGrid() {
           const hitDesc = searchFields.description && matchesKeyword(s.description, kw);
           if (hitTitle || hitTags || hitDesc) return true;
           if (searchSubEpisodes) {
-            return s.memberIds.some((id) => {
-              const m = media.find((x) => x.id === id);
-              return m ? mediaKeywordHit(m, kw) : false;
-            });
+            if (seriesSubSeries(s, series).some((sub) => matchesKeyword(sub.title, kw))) return true;
+            return seriesTreeMembers(s, series, media).some((m) => mediaKeywordHit(m, kw));
           }
           return false;
         };
@@ -201,24 +208,29 @@ function MediaGrid() {
 
     let list: GridItem[];
     if (viewingSeries) {
-      const subItems = seriesSubSeries(viewingSeries, series)
-        .filter((s) => matchSeries(s, true))
-        .map((s) => ({ kind: 'series' as const, series: s }));
-      const mediaItems = viewingSeries.memberIds
-        .map((id) => media.find((m) => m.id === id))
-        .filter((m): m is MediaItem => Boolean(m))
-        .filter((m) => {
-          if (!showNSFW && m.restricted) return false;
-          if (onlyNSFW && !m.restricted) return false;
-          if (keywords.length) {
-            return searchMode === 'or'
-              ? keywords.some((kw) => mediaKeywordHit(m, kw))
-              : keywords.every((kw) => mediaKeywordHit(m, kw));
-          }
-          return true;
-        })
-        .map((m) => ({ kind: 'media' as const, media: m }));
-      list = [...subItems, ...mediaItems];
+      if (isComicLeaf(viewingSeries)) {
+        // 漫画叶子：不显示细分与成员媒体，仅保留漫画阅读功能
+        list = [];
+      } else {
+        const subItems = seriesSubSeries(viewingSeries, series)
+          .filter((s) => matchSeries(s, true))
+          .map((s) => ({ kind: 'series' as const, series: s }));
+        const mediaItems = viewingSeries.memberIds
+          .map((id) => media.find((m) => m.id === id))
+          .filter((m): m is MediaItem => Boolean(m))
+          .filter((m) => {
+            if (!showNSFW && m.restricted) return false;
+            if (onlyNSFW && !m.restricted) return false;
+            if (keywords.length) {
+              return searchMode === 'or'
+                ? keywords.some((kw) => mediaKeywordHit(m, kw))
+                : keywords.every((kw) => mediaKeywordHit(m, kw));
+            }
+            return true;
+          })
+          .map((m) => ({ kind: 'media' as const, media: m }));
+        list = [...subItems, ...mediaItems];
+      }
     } else {
       list = [
         ...media.filter(matchMedia).map((m) => ({ kind: 'media' as const, media: m })),
@@ -247,19 +259,6 @@ function MediaGrid() {
   ]);
 
   const selectedTagNames = tagFilter.map((id) => tags.find((t) => t.id === id)?.name ?? id);
-  const nsfwCount = useMemo(() => {
-    const hiddenMembers = memberIdSet(series);
-    const hiddenSubSeries = memberSeriesIdSet(series);
-    let m = media.filter((x) => !hiddenMembers.has(x.id) && !hiddenLibraryIds.has(x.libraryId));
-    let s = series.filter(
-      (x) => !hiddenLibraryIds.has(x.libraryId) && !hiddenSubSeries.has(x.id)
-    );
-    if (selectedLibraryId) {
-      m = m.filter((x) => x.libraryId === selectedLibraryId);
-      s = s.filter((x) => x.libraryId === selectedLibraryId);
-    }
-    return m.filter((x) => x.restricted).length + s.filter((x) => x.restricted).length;
-  }, [media, series, selectedLibraryId, hiddenLibraryIds]);
 
   const targetSeries = seriesTarget ? series.find((s) => s.id === seriesTarget) : null;
 
@@ -281,6 +280,20 @@ function MediaGrid() {
     }
     return ids;
   }, [selectedIds, media, series]);
+
+  // 系列成员文件不再支持单独打标签（标签属于系列本身）
+  const taglessMemberIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of series) {
+      for (const m of seriesTreeMembers(s, series, media)) set.add(m.id);
+    }
+    return set;
+  }, [series, media]);
+
+  const batchTagTargetIds = useMemo(
+    () => batchTargetIds.filter((id) => !taglessMemberIds.has(id)),
+    [batchTargetIds, taglessMemberIds]
+  );
 
   const resolveMovedUpdates = (moved: { from: string; to: string }[]) => {
     const updates: { id: string; filePath: string }[] = [];
@@ -339,12 +352,24 @@ function MediaGrid() {
       setTitleDialog(false);
       return;
     }
+    // 禁止在子系列里创建子系列
+    if (viewingSeries && !isTopLevelSeries(viewingSeries, series)) {
+      setTitleDialog(false);
+      return;
+    }
+    // 在母系列展开视图创建时，新系列作为母系列的子系列（文件夹建在母系列内部）
+    const parentSeries = viewingSeries ?? null;
+    const createFolder = parentSeries?.folderPath ?? lib.path;
+    if (parentSeries && !createFolder) {
+      setTitleDialog(false);
+      return;
+    }
     const mediaIds = selectedIds.filter((id) => media.some((m) => m.id === id));
     const seriesIds = selectedIds.filter((id) => series.some((s) => s.id === id));
     const files = mediaIds
       .map((id) => media.find((m) => m.id === id)?.filePath)
       .filter((p): p is string => Boolean(p));
-    const res = await window.electronAPI.createSeriesFolder(lib.path, title, files);
+    const res = await window.electronAPI.createSeriesFolder(createFolder, title, files);
     setTitleDialog(false);
     if (!res.ok) return;
     if (res.moved?.length) {
@@ -371,9 +396,25 @@ function MediaGrid() {
       if (seriesIds.length) {
         await moveSubSeriesInto(res.folderPath, seriesIds, dispatch);
       }
+      // 新系列作为母系列的子系列，并入的媒体/子系列从母系列直属中移除
+      if (parentSeries) {
+        dispatch(addSubSeries({ id: parentSeries.id, seriesIds: [action.payload.id] }));
+        for (const mid of mediaIds) {
+          if (parentSeries.memberIds.includes(mid)) {
+            dispatch(removeSeriesMember({ id: parentSeries.id, memberId: mid }));
+          }
+        }
+        for (const sid of seriesIds) {
+          if ((parentSeries.memberSeriesIds ?? []).includes(sid)) {
+            dispatch(removeSubSeries({ id: parentSeries.id, seriesId: sid }));
+          }
+        }
+      }
     }
     dispatch(setSelectionMode(false));
     dispatch(setSelectedSeries(action.payload.id));
+    // 创建后视角切到新建系列那一级（无论是否位于母系列内）
+    dispatch(setSeriesView(action.payload.id));
   };
 
   const handleSelectAll = () => {
@@ -382,7 +423,7 @@ function MediaGrid() {
 
   const handleBatchTag = (tagIds: string[], restricted: boolean) => {
     if (tagIds.length) {
-      dispatch(addTagToMediaBatch({ ids: batchTargetIds, tagIds }));
+      dispatch(addTagToMediaBatch({ ids: batchTagTargetIds, tagIds }));
     }
     dispatch(setMediaRestrictedBatch({ ids: batchTargetIds, restricted }));
   };
@@ -425,13 +466,7 @@ function MediaGrid() {
             </Button>
           </>
         )}
-        <Text size={300}>共 {items.length} 项</Text>
-        {viewingSeries && (
-          <Badge appearance="tint" color="brand">
-            系列：{viewingSeries.title}
-          </Badge>
-        )}
-        {viewingSeries && isPureImageSeries(viewingSeries, series, media) && (
+        {viewingSeries && isComicLeaf(viewingSeries) && (
           <Button
             appearance="primary"
             size="small"
@@ -451,26 +486,10 @@ function MediaGrid() {
             清除标签筛选
           </Button>
         )}
-        {!showNSFW && nsfwCount > 0 && (
-          <Badge appearance="tint" color="danger">
-            已隐藏 {nsfwCount} 条 NSFW
-          </Badge>
-        )}
         <div style={{ flex: 1 }} />
-        <Button
-          appearance={selectionMode ? 'primary' : 'outline'}
-          size="small"
-          icon={<SelectAllOff20Regular />}
-          onClick={() => dispatch(setSelectionMode(!selectionMode))}
-        >
-          {selectionMode ? '退出多选' : '多选'}
-        </Button>
         {selectionMode && (
           <>
-            <Badge appearance="tint" color="brand">
-              已选 {selectedIds.length} 项
-            </Badge>
-            {items.length > 0 && (
+            {items.length > 0 && selectedIds.length < items.length && (
               <Button size="small" appearance="outline" icon={<SelectAllOff20Regular />} onClick={handleSelectAll}>
                 全选
               </Button>
@@ -481,6 +500,8 @@ function MediaGrid() {
                   appearance="primary"
                   size="small"
                   icon={<TagMultiple20Regular />}
+                  disabled={!targetSeries && !!viewingSeries && !isTopLevelSeries(viewingSeries, series)}
+                  title={!targetSeries && viewingSeries && !isTopLevelSeries(viewingSeries, series) ? '不能在子系列里创建子系列' : undefined}
                   onClick={handleMerge}
                 >
                   {targetSeries ? `加入「${targetSeries.title}」` : '合并为系列'}
@@ -492,7 +513,7 @@ function MediaGrid() {
                   disabled={batchTargetIds.length === 0}
                   onClick={() => setBatchTagOpen(true)}
                 >
-                  加标签 ({batchTargetIds.length})
+                  加标签
                 </Button>
                 {viewingSeries && (
                   <Button
@@ -506,20 +527,36 @@ function MediaGrid() {
                 )}
               </>
             )}
-            <Button size="small" appearance="subtle" onClick={() => dispatch(clearSelectedIds())}>
-              清除
-            </Button>
+            {selectedIds.length >= 2 && (
+              <Button size="small" appearance="outline" onClick={() => dispatch(clearSelectedIds())}>
+                清除
+              </Button>
+            )}
           </>
         )}
+        <Button
+          appearance={selectionMode ? 'primary' : 'outline'}
+          size="small"
+          icon={<SelectAllOff20Regular />}
+          onClick={() => dispatch(setSelectionMode(!selectionMode))}
+        >
+          {selectionMode ? '退出多选' : '多选'}
+        </Button>
       </div>
 
       {libraries.length === 0 ? (
         <div className={styles.empty}>
           <Text size={400}>还没有库，点击左上角「新建库」选择一个文件夹开始管理你的媒体</Text>
         </div>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && viewingSeries && isComicLeaf(viewingSeries) ? (
         <div className={styles.empty}>
-          <Text size={400}>{viewingSeries ? '该系列暂无剧集，可在右侧详情中添加媒体' : '没有找到匹配的媒体'}</Text>
+          <Text size={400}>漫画系列已就绪，点击上方「漫画阅读」开始阅读</Text>
+        </div>
+      ) : items.length === 0 && !(viewingSeries && isComicLeaf(viewingSeries)) ? (
+        <div className={styles.empty}>
+          <Text size={400}>
+            {viewingSeries ? '该系列暂无剧集，可在右侧详情中添加媒体' : '没有找到匹配的媒体'}
+          </Text>
         </div>
       ) : (
         <div className={styles.grid}>
@@ -542,7 +579,6 @@ function MediaGrid() {
       />
       <BatchTagDialog
         open={batchTagOpen}
-        targetCount={batchTargetIds.length}
         onConfirm={handleBatchTag}
         onClose={() => setBatchTagOpen(false)}
       />

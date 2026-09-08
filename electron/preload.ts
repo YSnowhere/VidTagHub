@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('series:createFolder', libraryPath, title, filePaths),
   markSeriesFolder: (folderPath: string, seriesId: string) =>
     ipcRenderer.invoke('series:markFolder', folderPath, seriesId),
+  listSeriesFolder: (folderPath: string) =>
+    ipcRenderer.invoke('series:listFolder', folderPath),
   migrateLegacySeries: (
     libraryPath: string,
     seriesList: { id: string; title: string; memberFilePaths: string[] }[]
@@ -40,6 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('series:renameFolder', folderPath, newTitle),
   dissolveSeriesFolder: (folderPath: string) =>
     ipcRenderer.invoke('series:dissolveFolder', folderPath),
+  deleteSeriesFolder: (folderPath: string) =>
+    ipcRenderer.invoke('series:deleteFolder', folderPath),
   moveSeriesFolderInto: (folderPath: string, targetParentFolder: string) =>
     ipcRenderer.invoke('series:moveFolderInto', folderPath, targetParentFolder),
   moveSeriesFolderOut: (folderPath: string, parentFolderPath: string) =>

@@ -44,9 +44,6 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: 0,
   },
-  hint: {
-    color: tokens.colorNeutralForeground3,
-  },
 });
 
 export function EditLibraryDialog({ open, libraryId, onClose }: Props) {
@@ -142,9 +139,6 @@ export function EditLibraryDialog({ open, libraryId, onClose }: Props) {
                 <div className={styles.row}>
                   <div className={styles.rowText}>
                     <Text size={300}>重新扫描</Text>
-                    <Text size={200} block className={styles.hint}>
-                      重新扫描该库文件夹，添加新增的媒体文件
-                    </Text>
                   </div>
                   <Button
                     icon={<ArrowClockwise20Regular />}
@@ -158,18 +152,12 @@ export function EditLibraryDialog({ open, libraryId, onClose }: Props) {
                 <div className={styles.row}>
                   <div className={styles.rowText}>
                     <Text size={300}>NSFW 库</Text>
-                    <Text size={200} block className={styles.hint}>
-                      未开启「显示 NSFW 内容」时，该库及其内容完全不显示
-                    </Text>
                   </div>
                   <Switch checked={!!library.nsfw} onChange={(_, d) => save({ nsfw: !!d.checked })} label="启用" />
                 </div>
                 <div className={styles.row}>
                   <div className={styles.rowText}>
                     <Text size={300}>折叠库</Text>
-                    <Text size={200} block className={styles.hint}>
-                      左侧仍显示该库，但在「全部」中不显示其内容（包括搜索）
-                    </Text>
                   </div>
                   <Switch
                     checked={!!library.collapsed}
@@ -181,7 +169,7 @@ export function EditLibraryDialog({ open, libraryId, onClose }: Props) {
                   <div className={styles.rowText}>
                     <Text size={300}>删除数据</Text>
                     <Text size={200} block style={{ color: tokens.colorPaletteRedForeground1 }}>
-                      彻底删除该库文件夹及其中所有文件，与「删除库」不同
+                      彻底删除该库文件夹及其中所有文件
                     </Text>
                   </div>
                   <Button

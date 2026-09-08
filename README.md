@@ -44,6 +44,8 @@
 ### 🎨 漫画阅读
 - 对纯图片系列可以进入漫画阅读状态
 - 支持多级系列，方便漫画分话管理
+- 基于开源图片查看器内核 [react-viewer](https://github.com/infeng/react-viewer)（viewerjs 的 React 封装）
+  提供稳健的缩放、拖拽、双指捏合、旋转、翻转与多页切换
 
 ### ❓ 常见问题
 - 初次导入「库」时，如遇卡顿，请等待图片加载完毕。
@@ -55,43 +57,10 @@
 
 - 前端：React 18 + TypeScript + Redux Toolkit
 - UI：Microsoft Fluent UI
+- 漫画阅读内核：[react-viewer](https://github.com/infeng/react-viewer)（MIT）
 - 桌面层：Electron
 - 构建：CRACO + Electron Builder
 - 包管理器：pnpm
-
-## 🚀 快速开始
-
-安装依赖（国内建议设置 Electron 镜像）：
-
-```cmd
-set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-pnpm install
-```
-
-开发运行（React 热更新 + Electron 窗口）：
-
-```cmd
-pnpm dev
-```
-
-重新编译（产物在 `build/`）：
-
-```cmd
-rmdir /s /q build
-rmdir /s /q release
-pnpm build
-```
-
-打包安装程序（产物在 `release/`，首次打包需联网下载工具）：
-
-```cmd
-set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-pnpm dist
-```
-
-- `release\VidTagHub Setup 0.2.0.exe` —— NSIS 安装程序
-- `release\win-unpacked\` —— 免安装绿色版，可直接运行 `VidTagHub.exe`
-- 版本号与产品名在 `package.json` 的 `version` 和 `build.productName` 中修改
 
 ## 📂 目录结构
 

@@ -30,6 +30,7 @@ declare global {
         filePaths: string[]
       ) => Promise<{ ok: boolean; folderPath?: string; title?: string; moved?: MovedFile[]; error?: string }>;
       markSeriesFolder: (folderPath: string, seriesId: string) => Promise<{ ok: boolean; error?: string }>;
+      listSeriesFolder: (folderPath: string) => Promise<ScanResult[]>;
       migrateLegacySeries: (
         libraryPath: string,
         seriesList: { id: string; title: string; memberFilePaths: string[] }[]
@@ -49,10 +50,11 @@ declare global {
       renameSeriesFolder: (
         folderPath: string,
         newTitle: string
-      ) => Promise<{ ok: boolean; folderPath?: string; title?: string; error?: string }>;
+      ) => Promise<{ ok: boolean; folderPath?: string; title?: string; moved?: MovedFile[]; error?: string }>;
       dissolveSeriesFolder: (
         folderPath: string
-      ) => Promise<{ ok: boolean; moved?: MovedFile[]; error?: string }>;
+      ) => Promise<{ ok: boolean; moved?: MovedFile[]; movedFolders?: { from: string; to: string }[]; error?: string }>;
+      deleteSeriesFolder: (folderPath: string) => Promise<{ ok: boolean; error?: string }>;
       moveSeriesFolderInto: (
         folderPath: string,
         targetParentFolder: string

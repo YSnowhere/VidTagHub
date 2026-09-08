@@ -1,8 +1,8 @@
 {
   "name": "vidtaghub",
-  "version": "0.4.4",
+  "version": "1.0.0",
   "private": true,
-  "description": "对本地视频、图片进行分类管理的桌面软件",
+  "description": "对本地视频、图片、漫画进行分类管理的桌面软件",
   "license": "Apache-2.0",
   "author": "vidtaghub",
   "main": "build/electron/main.js",
@@ -19,7 +19,9 @@
     "@reduxjs/toolkit": "^2.2.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-redux": "^9.1.2"
+    "react-redux": "^9.1.2",
+    "react-viewer": "^3.2.5",
+    "use-sync-external-store": "^1.6.0"
   },
   "devDependencies": {
     "@craco/craco": "^7.1.0",

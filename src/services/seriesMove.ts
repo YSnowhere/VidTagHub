@@ -6,6 +6,14 @@ import type { MovedFile, Series } from '../types';
 const normPath = (p: string): string => p.replace(/[\\/]+/g, '/').toLowerCase();
 const dirnamePath = (p: string): string => p.replace(/[\\/]+[^\\/]*$/, '');
 
+/** 当目录从 oldDir 移动/重命名为 newDir 时，把位于其中的路径一并平移（否则返回原值） */
+export function translatePath(p: string | undefined, oldDir: string, newDir: string): string | undefined {
+  if (!p) return undefined;
+  if (p === oldDir) return newDir;
+  if (p.startsWith(oldDir)) return newDir + p.slice(oldDir.length);
+  return p;
+}
+
 /** 将磁盘移动记录转换为媒体路径更新（按旧路径匹配媒体） */
 export function applyMovedFiles(moved: MovedFile[]): { id: string; filePath: string }[] {
   const state = store.getState();
@@ -17,15 +25,28 @@ export function applyMovedFiles(moved: MovedFile[]): { id: string; filePath: str
   return updates;
 }
 
-// 子系列文件夹移动后，同步其自身及所有后代系列的 folderPath
+// 子系列文件夹移动后，同步其自身及所有后代系列的 folderPath 与 coverPath
 function updateDescendantFolderPaths(sub: Series, oldPath: string, newPath: string, dispatch: AppDispatch): void {
   if (oldPath === newPath) return;
-  dispatch(updateSeries({ id: sub.id, patch: { folderPath: newPath } }));
+  dispatch(
+    updateSeries({
+      id: sub.id,
+      patch: { folderPath: newPath, coverPath: translatePath(sub.coverPath, oldPath, newPath) },
+    })
+  );
   const state = store.getState();
   for (const s of state.data.series) {
     if (s.id === sub.id) continue;
     if (s.folderPath && s.folderPath.startsWith(oldPath)) {
-      dispatch(updateSeries({ id: s.id, patch: { folderPath: newPath + s.folderPath.slice(oldPath.length) } }));
+      dispatch(
+        updateSeries({
+          id: s.id,
+          patch: {
+            folderPath: newPath + s.folderPath.slice(oldPath.length),
+            coverPath: translatePath(s.coverPath, oldPath, newPath),
+          },
+        })
+      );
     }
   }
 }

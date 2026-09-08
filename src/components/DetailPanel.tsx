@@ -7,11 +7,12 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  Divider,
   Field,
-  Popover,
-  PopoverSurface,
-  PopoverTrigger,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   Text,
   Textarea,
   makeStyles,
@@ -31,15 +32,20 @@ import {
   Collections20Regular,
   Camera20Regular,
   Document20Regular,
+  BookOpen20Regular,
 } from '@fluentui/react-icons';
 import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
+  addSeriesMembers,
+  addSubSeries,
   removeMedia,
   removeSeries,
   removeSeriesMember,
   removeSubSeries,
   setMediaPaths,
+  setSeriesComicMode,
+  setSeriesImageMode,
   updateMedia,
   updateSeries,
 } from '../store/dataSlice';
@@ -54,13 +60,18 @@ import {
 } from '../store/uiSlice';
 import { displayName, previewUrl, formatSize, formatDate } from '../services/format';
 import {
+  isComicSeries,
+  isComicLeaf,
+  isPureImageSeries,
+  isTopLevelSeries,
+  seriesContainingMedia,
   seriesCoverCandidates,
   seriesEffectiveRestricted,
   seriesEffectiveTags,
   seriesMembers,
   seriesSubSeries,
-  seriesTypeText,
   seriesTotalSize,
+  seriesTypeLabel,
 } from '../services/series';
 import { visibleTags } from '../services/tags';
 import { TagEditDialog } from './TagEditDialog';
@@ -68,7 +79,7 @@ import { RenameDialog } from './RenameDialog';
 import { FrameCaptureDialog } from './FrameCaptureDialog';
 import { CropImageDialog } from './CropImageDialog';
 import { SeriesTitleDialog } from './SeriesTitleDialog';
-import { moveMediaOutOfSeries, moveSubSeriesOut } from '../services/seriesMove';
+import { moveMediaOutOfSeries, moveSubSeriesOut, translatePath } from '../services/seriesMove';
 import type { MediaItem, Series, Tag } from '../types';
 
 const useStyles = makeStyles({
@@ -82,6 +93,7 @@ const useStyles = makeStyles({
     background: tokens.colorNeutralBackground1,
     borderLeft: `1px solid ${tokens.colorNeutralStroke1}`,
     overflowY: 'auto',
+    scrollbarGutter: 'stable',
     minHeight: 0,
   },
   empty: {
@@ -126,12 +138,12 @@ const useStyles = makeStyles({
   tagSummary: {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: tokens.spacingHorizontalXS,
+    gap: tokens.spacingHorizontalS,
+    alignItems: 'center',
   },
   actions: {
     display: 'flex',
     gap: tokens.spacingHorizontalS,
-    paddingTop: tokens.spacingVerticalM,
     flexShrink: 0,
   },
   memberRow: {
@@ -180,18 +192,6 @@ const useStyles = makeStyles({
   metaText: {
     color: tokens.colorNeutralForeground3,
   },
-  coverCandidate: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalS,
-    padding: tokens.spacingVerticalXS,
-    borderRadius: tokens.borderRadiusSmall,
-    cursor: 'pointer',
-    minWidth: '220px',
-    ':hover': {
-      background: tokens.colorNeutralBackground3,
-    },
-  },
   coverCandidateThumb: {
     width: '40px',
     height: '22px',
@@ -199,14 +199,6 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusSmall,
     background: tokens.colorNeutralBackground3,
     flexShrink: 0,
-  },
-  coverCandidateList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalXS,
-    maxHeight: '220px',
-    overflowY: 'auto',
-    padding: tokens.spacingVerticalXS,
   },
 });
 
@@ -242,6 +234,7 @@ function MediaDetail({ item }: { item: MediaItem }) {
   const tags = useAppSelector((s) => s.data.tags);
   const showNSFW = useAppSelector((s) => s.ui.showNSFW);
   const seriesList = useAppSelector((s) => s.data.series);
+  const allMedia = useAppSelector((s) => s.data.media);
   const styles = useStyles();
 
   const [tagEditOpen, setTagEditOpen] = useState(false);
@@ -259,6 +252,14 @@ function MediaDetail({ item }: { item: MediaItem }) {
       ? previewUrl(item.coverPath)
       : null;
   const isPdf = item.type === 'pdf';
+  const ownerSeries = seriesContainingMedia(item, seriesList, allMedia);
+  const inTaglessSeries = Boolean(ownerSeries);
+  const ownerSeriesTags = ownerSeries
+    ? seriesEffectiveTags(ownerSeries, seriesList, allMedia)
+        .map((id) => tags.find((t) => t.id === id))
+        .filter((t): t is Tag => Boolean(t))
+    : [];
+  const visibleOwnerSeriesTags = visibleTags(ownerSeriesTags, showNSFW);
   const itemTags = item.tags
     .map((id) => tags.find((t) => t.id === id))
     .filter((t): t is Tag => Boolean(t));
@@ -331,27 +332,47 @@ function MediaDetail({ item }: { item: MediaItem }) {
       <Field label="类型 / 标签">
         <div className={styles.tagSummary}>
           {item.restricted && (
-            <Badge size="small" appearance="tint" color="danger">
+            <Badge size="large" appearance="tint" color="danger">
               NSFW
             </Badge>
           )}
           <Badge
-            size="small"
+            size="large"
             appearance="tint"
             color={item.type === 'video' ? 'informative' : item.type === 'pdf' ? 'warning' : 'success'}
           >
             {item.type === 'video' ? '视频' : item.type === 'pdf' ? 'PDF' : '图片'}
           </Badge>
-          {itemTags.length === 0 && <Text size={200}>未添加标签</Text>}
-          {visibleItemTags.map((t) => (
-            <Badge key={t.id} size="small" appearance="tint">
-              {t.name}
-            </Badge>
-          ))}
+          {ownerSeries ? (
+            <>
+              {visibleOwnerSeriesTags.length === 0 && <Text size={200}>未添加标签</Text>}
+              {visibleOwnerSeriesTags.map((t) => (
+                <Badge key={t.id} size="large" appearance="tint">
+                  {t.name}
+                </Badge>
+              ))}
+            </>
+          ) : (
+            <>
+              {itemTags.length === 0 && <Text size={200}>未添加标签</Text>}
+              {visibleItemTags.map((t) => (
+                <Badge key={t.id} size="large" appearance="tint">
+                  {t.name}
+                </Badge>
+              ))}
+            </>
+          )}
         </div>
-        <Button icon={<Tag20Regular />} size="small" onClick={() => setTagEditOpen(true)}>
-          修改标签
-        </Button>
+        {!inTaglessSeries && (
+<Button
+            icon={<Tag20Regular />}
+            size="small"
+            style={{ marginTop: tokens.spacingVerticalS }}
+            onClick={() => setTagEditOpen(true)}
+          >
+            修改标签
+          </Button>
+        )}
       </Field>
 
       <div className={styles.actions}>
@@ -378,34 +399,38 @@ function MediaDetail({ item }: { item: MediaItem }) {
       </Field>
 
       <Field label="自定义封面">
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {item.type === 'image' ? (
-            <Button icon={<Image20Regular />} onClick={() => setCropTarget(item.filePath)}>
-              裁剪封面
-            </Button>
-          ) : (
-            <>
-              <Button icon={<Image20Regular />} onClick={() => void pickCover()}>
-                选择封面图片
-              </Button>
-              {item.type === 'video' && (
-                <Button icon={<VideoClip20Regular />} onClick={() => setFrameCaptureOpen(true)}>
-                  从视频截帧
-                </Button>
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <Button icon={<Image20Regular />}>设置封面</Button>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              {item.type === 'image' ? (
+                <MenuItem icon={<Image20Regular />} onClick={() => setCropTarget(item.filePath)}>
+                  裁剪封面
+                </MenuItem>
+              ) : (
+                <>
+                  <MenuItem icon={<Image20Regular />} onClick={() => void pickCover()}>
+                    选择封面图片
+                  </MenuItem>
+                  {item.type === 'video' && (
+                    <MenuItem icon={<VideoClip20Regular />} onClick={() => setFrameCaptureOpen(true)}>
+                      从视频截帧
+                    </MenuItem>
+                  )}
+                </>
               )}
-            </>
-          )}
-          {item.coverPath && (
-            <Button onClick={() => dispatch(updateMedia({ id: item.id, patch: { coverPath: undefined } }))}>
-              {item.type === 'image' ? '使用原图' : '移除封面'}
-            </Button>
-          )}
-        </div>
-        {item.type === 'image' && !item.coverPath && (
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3, display: 'block', marginTop: 4 }}>
-            图片默认以自身作为封面，可裁剪调整显示区域
-          </Text>
-        )}
+              {item.coverPath && (
+                <MenuItem
+                  onClick={() => dispatch(updateMedia({ id: item.id, patch: { coverPath: undefined } }))}
+                >
+                  {item.type === 'image' ? '使用原图' : '移除封面'}
+                </MenuItem>
+              )}
+            </MenuList>
+          </MenuPopover>
+        </Menu>
       </Field>
 
       <div className={styles.metaRow}>
@@ -414,26 +439,28 @@ function MediaDetail({ item }: { item: MediaItem }) {
         </Text>
       </div>
 
-      <TagEditDialog
-        open={tagEditOpen}
-        title={displayName(item.fileName)}
-        tags={item.tags}
-        restricted={item.restricted}
-        onToggleTag={(tagId) =>
-          dispatch(
-            updateMedia({
-              id: item.id,
-              patch: {
-                tags: item.tags.includes(tagId)
-                  ? item.tags.filter((t) => t !== tagId)
-                  : [...item.tags, tagId],
-              },
-            })
-          )
-        }
-        onSetRestricted={(v) => dispatch(updateMedia({ id: item.id, patch: { restricted: v } }))}
-        onClose={() => setTagEditOpen(false)}
-      />
+      {!inTaglessSeries && (
+        <TagEditDialog
+          open={tagEditOpen}
+          title={displayName(item.fileName)}
+          tags={item.tags}
+          restricted={item.restricted}
+          onToggleTag={(tagId) =>
+            dispatch(
+              updateMedia({
+                id: item.id,
+                patch: {
+                  tags: item.tags.includes(tagId)
+                    ? item.tags.filter((t) => t !== tagId)
+                    : [...item.tags, tagId],
+                },
+              })
+            )
+          }
+          onSetRestricted={(v) => dispatch(updateMedia({ id: item.id, patch: { restricted: v } }))}
+          onClose={() => setTagEditOpen(false)}
+        />
+      )}
       <RenameDialog item={item} open={renameOpen} onClose={() => setRenameOpen(false)} />
       {item.type === 'video' && (
         <FrameCaptureDialog
@@ -498,14 +525,20 @@ function SeriesDetail({ series }: { series: Series }) {
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [cropTarget, setCropTarget] = useState<string | null>(null);
+  const [tagEditOpen, setTagEditOpen] = useState(false);
+  const [deleteSeriesOpen, setDeleteSeriesOpen] = useState(false);
 
   const members = seriesMembers(series, media);
   const subSeries = seriesSubSeries(series, allSeries);
   const effectiveTags = seriesEffectiveTags(series, allSeries, media);
   const totalSize = seriesTotalSize(series, allSeries, media);
-  const typeText = seriesTypeText(series, allSeries, media);
   const coverCandidates = seriesCoverCandidates(series, allSeries, media);
   const effectiveRestricted = seriesEffectiveRestricted(series, allSeries, media);
+  const comic = isComicSeries(series);
+  const comicLeaf = isComicLeaf(series);
+  const pureImages = isPureImageSeries(series, allSeries, media);
+  const typeLabel = seriesTypeLabel(series, allSeries, media);
+  const isTopLevel = isTopLevelSeries(series, allSeries);
 
   const firstCover = (() => {
     if (series.coverPath) return previewUrl(series.coverPath);
@@ -533,6 +566,7 @@ function SeriesDetail({ series }: { series: Series }) {
   };
 
   const handleRemove = async () => {
+    const parentSeries = allSeries.find((s) => (s.memberSeriesIds ?? []).includes(series.id));
     if (series.folderPath) {
       const res = await window.electronAPI.dissolveSeriesFolder(series.folderPath);
       if (res.ok && res.moved?.length) {
@@ -543,16 +577,66 @@ function SeriesDetail({ series }: { series: Series }) {
         }
         if (updates.length) dispatch(setMediaPaths(updates));
       }
+      // 子系列文件夹上移后，同步其 folderPath（及内部媒体路径已由 moved 更新）
+      for (const f of res.movedFolders ?? []) {
+        const sub = allSeries.find((s) => s.folderPath === f.from);
+        if (sub) {
+          dispatch(updateSeries({ id: sub.id, patch: { folderPath: f.to } }));
+        }
+      }
+    }
+    // 直属媒体与子系列重新归属到父系列（若有），文件落在父系列文件夹中
+    if (parentSeries) {
+      if (series.memberIds.length) {
+        dispatch(addSeriesMembers({ id: parentSeries.id, memberIds: series.memberIds }));
+      }
+      const childIds = series.memberSeriesIds ?? [];
+      if (childIds.length) {
+        dispatch(addSubSeries({ id: parentSeries.id, seriesIds: childIds }));
+      }
     }
     dispatch(removeSeries(series.id));
-    dispatch(setSelectedSeries(null));
-    dispatch(clearSeriesView());
+    // 视角切换到文件所在位置：有父系列则显示父系列视图，否则回到库根
+    if (parentSeries) {
+      dispatch(setSelectedSeries(parentSeries.id));
+      dispatch(setSeriesView(parentSeries.id));
+    } else {
+      dispatch(setSelectedSeries(null));
+      dispatch(clearSeriesView());
+    }
+  };
+
+  const handleComicDelete = async () => {
+    setDeleteSeriesOpen(false);
+    if (series.folderPath) {
+      const res = await window.electronAPI.deleteSeriesFolder(series.folderPath);
+      if (!res.ok) return;
+    }
+    const parentSeries = allSeries.find((s) => (s.memberSeriesIds ?? []).includes(series.id));
+    dispatch(removeSeries(series.id));
+    if (parentSeries) {
+      dispatch(setSelectedSeries(parentSeries.id));
+      dispatch(setSeriesView(parentSeries.id));
+    } else {
+      dispatch(setSelectedSeries(null));
+      dispatch(clearSeriesView());
+    }
   };
 
   const handleAddMedia = () => {
     dispatch(setSeriesTarget(series.id));
     dispatch(setSelectionMode(true));
     dispatch(setView('media'));
+  };
+
+  const handleSwitchToImage = async () => {
+    if (!series.folderPath) return;
+    const files = await window.electronAPI.listSeriesFolder(series.folderPath);
+    dispatch(setSeriesImageMode({ id: series.id, files }));
+  };
+
+  const handleSwitchToComic = () => {
+    dispatch(setSeriesComicMode(series.id));
   };
 
   return (
@@ -596,37 +680,76 @@ function SeriesDetail({ series }: { series: Series }) {
       <Field label="类型 / 标签">
         <div className={styles.tagSummary}>
           {effectiveRestricted && (
-            <Badge size="small" appearance="tint" color="danger">
+            <Badge size="large" appearance="tint" color="danger">
               NSFW
             </Badge>
           )}
-          <Badge size="small" appearance="filled" color="brand">
-            系列
-          </Badge>
           <Badge
-            size="small"
+            size="large"
             appearance="filled"
-            color={typeText.startsWith('视频') ? 'informative' : 'success'}
+            color={typeLabel === '漫画' ? 'brand' : typeLabel === '视频' ? 'informative' : typeLabel === 'PDF' ? 'warning' : 'success'}
           >
-            {typeText}
+            {typeLabel}
           </Badge>
           {itemTags.length === 0 && <Text size={200}>未添加标签</Text>}
           {visibleItemTags.map((t) => (
-            <Badge key={t.id} size="small" appearance="tint">
+            <Badge key={t.id} size="large" appearance="tint">
               {t.name}
             </Badge>
           ))}
         </div>
+        {isTopLevel && (
+<Button
+            icon={<Tag20Regular />}
+            size="small"
+            style={{ marginTop: tokens.spacingVerticalS }}
+            onClick={() => setTagEditOpen(true)}
+          >
+            修改标签
+          </Button>
+        )}
       </Field>
 
       <div className={styles.actions}>
-        <Button appearance="primary" icon={<Open20Regular />} onClick={handleExpand}>
-          展开
-        </Button>
-        <Button icon={<Delete20Regular />} onClick={handleRemove}>
-          删除系列
+        {comicLeaf ? (
+          <Button
+            appearance="primary"
+            icon={<BookOpen20Regular />}
+            onClick={() => void window.electronAPI.openComicReader(series.id)}
+          >
+            漫画阅读
+          </Button>
+        ) : (
+          <Button appearance="primary" icon={<Open20Regular />} onClick={handleExpand}>
+            展开
+          </Button>
+        )}
+        <Button
+          icon={<Delete20Regular />}
+          onClick={() => (comic ? setDeleteSeriesOpen(true) : void handleRemove())}
+        >
+          {comic ? '删除系列' : '解散系列'}
         </Button>
       </div>
+
+      {(isTopLevel && (comic || pureImages)) && (
+        <Field label="系列模式">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Badge appearance="tint" color={comic ? 'brand' : 'informative'} size="small">
+              {comic ? '漫画模式' : '图片模式'}
+            </Badge>
+            {comic ? (
+              <Button size="small" appearance="outline" onClick={() => void handleSwitchToImage()}>
+                切换为图片模式
+              </Button>
+            ) : (
+              <Button size="small" appearance="outline" onClick={handleSwitchToComic}>
+                切换为漫画模式
+              </Button>
+            )}
+          </div>
+        </Field>
+      )}
 
       <Field label="简介">
         <Textarea
@@ -638,7 +761,8 @@ function SeriesDetail({ series }: { series: Series }) {
         />
       </Field>
 
-      <Field label="成员">
+      {!comicLeaf && (
+        <Field label="成员">
         <Text size={200}>
           {members.length} 个媒体{subSeries.length > 0 ? ` · ${subSeries.length} 个子系列` : ''}
         </Text>
@@ -713,55 +837,63 @@ function SeriesDetail({ series }: { series: Series }) {
             );
           })}
         </div>
-        <Button icon={<Add20Regular />} size="small" onClick={handleAddMedia}>
+        <Button
+          icon={<Add20Regular />}
+          size="small"
+          style={{ marginTop: tokens.spacingVerticalS }}
+          onClick={handleAddMedia}
+        >
           添加媒体
         </Button>
       </Field>
-
-      <Divider />
+      )}
 
       <Field label="自定义封面">
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Button icon={<Image20Regular />} onClick={() => void pickCover()}>
-            上传封面
-          </Button>
-          {coverCandidates.length > 0 && (
-            <Popover>
-              <PopoverTrigger disableButtonEnhancement>
-                <Button icon={<Camera20Regular />}>从剧集选择</Button>
-              </PopoverTrigger>
-              <PopoverSurface>
-                <div className={styles.coverCandidateList}>
-                  {coverCandidates.map(({ member, coverPath }) => (
-                    <div
-                      key={member.id}
-                      className={styles.coverCandidate}
-                      onClick={() =>
-                        dispatch(updateSeries({ id: series.id, patch: { coverPath } }))
-                      }
-                    >
-                      <img className={styles.coverCandidateThumb} src={previewUrl(coverPath)} alt="" draggable={false} loading="lazy" decoding="async" />
-                      <Text
-                        size={200}
-                        style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={member.fileName}
-                      >
-                        {displayName(member.fileName)}
-                      </Text>
-                    </div>
-                  ))}
-                </div>
-              </PopoverSurface>
-            </Popover>
-          )}
-          {series.coverPath && (
-            <Button
-              onClick={() => dispatch(updateSeries({ id: series.id, patch: { coverPath: undefined } }))}
-            >
-              移除封面
-            </Button>
-          )}
-        </div>
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <Button icon={<Image20Regular />}>设置封面</Button>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              <MenuItem icon={<Image20Regular />} onClick={() => void pickCover()}>
+                上传封面
+              </MenuItem>
+              {coverCandidates.length > 0 && (
+                <Menu>
+                  <MenuTrigger disableButtonEnhancement>
+                    <MenuItem icon={<Camera20Regular />}>从剧集选择</MenuItem>
+                  </MenuTrigger>
+                  <MenuPopover>
+                    <MenuList style={{ maxHeight: 280, overflowY: 'auto' }}>
+                      {coverCandidates.map(({ member, coverPath }) => (
+                        <MenuItem
+                          key={member.id}
+                          onClick={() => dispatch(updateSeries({ id: series.id, patch: { coverPath } }))}
+                        >
+                          <img className={styles.coverCandidateThumb} src={previewUrl(coverPath)} alt="" draggable={false} loading="lazy" decoding="async" />
+                          <Text
+                            size={200}
+                            style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={member.fileName}
+                          >
+                            {displayName(member.fileName)}
+                          </Text>
+                        </MenuItem>
+                      ))}
+                    </MenuList>
+                  </MenuPopover>
+                </Menu>
+              )}
+              {series.coverPath && (
+                <MenuItem
+                  onClick={() => dispatch(updateSeries({ id: series.id, patch: { coverPath: undefined } }))}
+                >
+                  移除封面
+                </MenuItem>
+              )}
+            </MenuList>
+          </MenuPopover>
+        </Menu>
       </Field>
 
       <div className={styles.metaRow}>
@@ -779,13 +911,43 @@ function SeriesDetail({ series }: { series: Series }) {
           void (async () => {
             if (series.folderPath) {
               const res = await window.electronAPI.renameSeriesFolder(series.folderPath, title);
-              if (res.ok) {
+              if (res.ok && res.folderPath) {
+                const oldPath = series.folderPath;
+                const newPath = res.folderPath;
                 dispatch(
                   updateSeries({
                     id: series.id,
-                    patch: { title: res.title ?? title, folderPath: res.folderPath },
+                    patch: {
+                      title: res.title ?? title,
+                      folderPath: newPath,
+                      coverPath: translatePath(series.coverPath, oldPath, newPath),
+                    },
                   })
                 );
+                // 关键修复：递归同步所有后代系列的 folderPath / coverPath（避免路径断链）
+                for (const d of allSeries) {
+                  if (d.id === series.id) continue;
+                  if (d.folderPath && d.folderPath.startsWith(oldPath)) {
+                    dispatch(
+                      updateSeries({
+                        id: d.id,
+                        patch: {
+                          folderPath: newPath + d.folderPath.slice(oldPath.length),
+                          coverPath: translatePath(d.coverPath, oldPath, newPath),
+                        },
+                      })
+                    );
+                  }
+                }
+                // 同步文件夹内媒体文件路径
+                if (res.moved?.length) {
+                  const updates: { id: string; filePath: string }[] = [];
+                  for (const mv of res.moved) {
+                    const m = media.find((x) => x.filePath === mv.from);
+                    if (m) updates.push({ id: m.id, filePath: mv.to });
+                  }
+                  if (updates.length) dispatch(setMediaPaths(updates));
+                }
               }
             } else {
               dispatch(updateSeries({ id: series.id, patch: { title } }));
@@ -793,6 +955,26 @@ function SeriesDetail({ series }: { series: Series }) {
             setRenameOpen(false);
           })();
         }}
+      />
+      <TagEditDialog
+        open={tagEditOpen}
+        title={series.title}
+        tags={series.tags}
+        restricted={series.restricted}
+        onToggleTag={(tagId) =>
+          dispatch(
+            updateSeries({
+              id: series.id,
+              patch: {
+                tags: series.tags.includes(tagId)
+                  ? series.tags.filter((t) => t !== tagId)
+                  : [...series.tags, tagId],
+              },
+            })
+          )
+        }
+        onSetRestricted={(v) => dispatch(updateSeries({ id: series.id, patch: { restricted: v } }))}
+        onClose={() => setTagEditOpen(false)}
       />
       {cropTarget && (
         <CropImageDialog
@@ -806,6 +988,37 @@ function SeriesDetail({ series }: { series: Series }) {
           }}
         />
       )}
+      <Dialog
+        open={deleteSeriesOpen}
+        onOpenChange={(_, data) => {
+          if (!data.open) setDeleteSeriesOpen(false);
+        }}
+      >
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>删除系列</DialogTitle>
+            <DialogContent>
+              <Text size={300}>确定要删除系列「{series.title}」吗？</Text>
+              <Text size={200} style={{ display: 'block', marginTop: 8, color: tokens.colorPaletteRedForeground1 }}>
+                此操作将删除该系列文件夹及其中的所有文件，不可恢复。
+              </Text>
+              {series.folderPath && (
+                <Text size={200} style={{ display: 'block', marginTop: 4, color: tokens.colorNeutralForeground3 }}>
+                  {series.folderPath}
+                </Text>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setDeleteSeriesOpen(false)}>
+                取消
+              </Button>
+              <Button appearance="primary" icon={<Delete20Regular />} onClick={() => void handleComicDelete()}>
+                确认删除
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
   );
 }

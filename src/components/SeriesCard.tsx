@@ -3,7 +3,7 @@ import { Collections20Regular, Open20Regular, BookOpen20Regular } from '@fluentu
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedSeries, setSeriesView, toggleSelectedId, setView } from '../store/uiSlice';
 import { previewUrl } from '../services/format';
-import { seriesEffectiveTags, seriesTypeText, isPureImageSeries, seriesSubSeriesCount } from '../services/series';
+import { seriesEffectiveTags, seriesTypeLabel, isComicLeaf, seriesSubSeriesCount } from '../services/series';
 import { visibleTags } from '../services/tags';
 import type { Series, Tag } from '../types';
 
@@ -16,6 +16,7 @@ const useStyles = makeStyles({
     background: tokens.colorNeutralBackground1,
     boxShadow: tokens.shadow2,
     cursor: 'pointer',
+    outline: `2px solid transparent`,
     ':hover': {
       boxShadow: tokens.shadow8,
     },
@@ -113,8 +114,8 @@ export function SeriesCard({ series }: Props) {
   const selected = selectedSeriesId === series.id;
   const isChecked = selectedIds.includes(series.id);
   const memberCount = series.memberIds.length + seriesSubSeriesCount(series);
-  const typeText = seriesTypeText(series, allSeries, media);
-  const pureImages = isPureImageSeries(series, allSeries, media);
+  const typeLabel = seriesTypeLabel(series, allSeries, media);
+  const comicLeaf = isComicLeaf(series);
   const subCount = seriesSubSeriesCount(series);
 
   const handleClick = () => {
@@ -132,9 +133,6 @@ export function SeriesCard({ series }: Props) {
   };
 
   const openReader = () => {
-    dispatch(setSelectedSeries(series.id));
-    dispatch(setSeriesView(series.id));
-    dispatch(setView('media'));
     void window.electronAPI.openComicReader(series.id);
   };
 
@@ -152,16 +150,13 @@ export function SeriesCard({ series }: Props) {
             <Collections20Regular />
           </div>
         )}
-        <Badge className={styles.typeBadge} size="small" appearance="filled" color="brand">
-          系列
-        </Badge>
         <Badge
+          className={styles.typeBadge}
           size="small"
           appearance="filled"
-          color={typeText.startsWith('视频') ? 'informative' : 'success'}
-          style={{ position: 'absolute', left: '6px', top: '28px' }}
+          color={typeLabel === '漫画' ? 'brand' : typeLabel === '视频' ? 'informative' : typeLabel === 'PDF' ? 'warning' : 'success'}
         >
-          {typeText}
+          {typeLabel}
         </Badge>
         {selectionMode && (
           <div className={styles.selectBox}>
@@ -174,7 +169,7 @@ export function SeriesCard({ series }: Props) {
           </div>
         )}
         <div className={`${styles.coverActions} ${selected ? styles.cardHoverActions : ''}`}>
-          {pureImages && (
+          {comicLeaf ? (
             <Button
               icon={<BookOpen20Regular />}
               size="small"
@@ -186,18 +181,19 @@ export function SeriesCard({ series }: Props) {
             >
               漫画阅读
             </Button>
+          ) : (
+            <Button
+              icon={<Open20Regular />}
+              size="small"
+              appearance="primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                openSeries();
+              }}
+            >
+              展开
+            </Button>
           )}
-          <Button
-            icon={<Open20Regular />}
-            size="small"
-            appearance="primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              openSeries();
-            }}
-          >
-            展开
-          </Button>
         </div>
       </div>
       <div className={styles.info}>

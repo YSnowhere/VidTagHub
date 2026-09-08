@@ -1,5 +1,5 @@
 import { createSlice, nanoid, PayloadAction } from '@reduxjs/toolkit';
-import { AppData, Library, MediaItem, ScanFolder, ScanResult, Series, Tag, DEFAULT_DATA } from '../types';
+import { AppData, Library, MediaItem, ScanFolder, ScanResult, Series, SeriesMode, Tag, DEFAULT_DATA } from '../types';
 
 const initialState: AppData = DEFAULT_DATA;
 
@@ -13,6 +13,68 @@ function wouldCreateCycle(child: Series, parentId: string, all: Series[]): boole
     if (cur) stack.push(...(cur.memberSeriesIds ?? []));
   }
   return false;
+}
+
+/** 收集系列树（自身 + 全部子系列）中的媒体成员 */
+function collectTreeMembers(state: AppData, s: Series): MediaItem[] {
+  const result: MediaItem[] = [];
+  const visited = new Set<string>();
+  const visit = (cur: Series): void => {
+    if (visited.has(cur.id)) return;
+    visited.add(cur.id);
+    for (const id of cur.memberIds) {
+      const m = state.media.find((x) => x.id === id);
+      if (m) result.push(m);
+    }
+    for (const sid of cur.memberSeriesIds ?? []) {
+      const sub = state.series.find((x) => x.id === sid);
+      if (sub) visit(sub);
+    }
+  };
+  visit(s);
+  return result;
+}
+
+/** 判断一个系列（含子系列）是否全部由图片组成 */
+function isPureImageTree(state: AppData, s: Series): boolean {
+  const visited = new Set<string>();
+  const visit = (cur: Series): boolean => {
+    if (visited.has(cur.id)) return false;
+    visited.add(cur.id);
+    const members = cur.memberIds
+      .map((id) => state.media.find((m) => m.id === id))
+      .filter((m): m is MediaItem => Boolean(m));
+    if (members.length === 0 && (cur.memberSeriesIds?.length ?? 0) === 0) return false;
+    if (members.some((m) => m.type !== 'image')) return false;
+    for (const sid of cur.memberSeriesIds ?? []) {
+      const sub = state.series.find((x) => x.id === sid);
+      if (!sub || !visit(sub)) return false;
+    }
+    return true;
+  };
+  return visit(s);
+}
+
+/** 将成员图片的受限标记合并到系列本身（漫画模式丢弃成员前调用，避免 NSFW 信息丢失）；标签属于系列本身，不再合并 */
+function mergeMemberFlagsToSeries(state: AppData, s: Series): void {
+  const members = collectTreeMembers(state, s);
+  if (members.some((m) => m.restricted)) s.restricted = true;
+}
+
+/** 将某个系列的全部后代（子系列及嵌套子系列）的 mode 统一为指定值 */
+function setDescendantModes(state: AppData, rootId: string, mode: SeriesMode): void {
+  const visit = (id: string): void => {
+    const cur = state.series.find((s) => s.id === id);
+    if (!cur) return;
+    for (const sid of cur.memberSeriesIds ?? []) {
+      const sub = state.series.find((s) => s.id === sid);
+      if (sub) {
+        sub.mode = mode;
+        visit(sub.id);
+      }
+    }
+  };
+  visit(rootId);
 }
 
 const dataSlice = createSlice({
@@ -226,6 +288,13 @@ const dataSlice = createSlice({
         return series;
       };
       for (const folder of action.payload.folders) ensureSeries(folder);
+
+      // 纯图片系列默认按「图片」模式处理（已有明确模式则保留）
+      for (const s of state.series) {
+        if (s.libraryId !== libraryId) continue;
+        if (s.mode !== undefined) continue;
+        if (isPureImageTree(state, s)) s.mode = 'image';
+      }
     },
     addTagToMediaBatch: (state, action: PayloadAction<{ ids: string[]; tagIds: string[] }>) => {
       const idSet = new Set(action.payload.ids);
@@ -292,7 +361,12 @@ const dataSlice = createSlice({
     },
     createSeries: {
       reducer: (state, action: PayloadAction<Series>) => {
-        state.series.push(action.payload);
+        const s = action.payload;
+        if (isPureImageTree(state, s)) {
+          s.mode = 'image';
+          mergeMemberFlagsToSeries(state, s);
+        }
+        state.series.push(s);
       },
       prepare: (payload: {
         libraryId: string;
@@ -320,12 +394,62 @@ const dataSlice = createSlice({
       action: PayloadAction<{
         id: string;
         patch: Partial<
-          Pick<Series, 'title' | 'tags' | 'coverPath' | 'description' | 'restricted' | 'folderPath' | 'memberSeriesIds'>
+          Pick<
+            Series,
+            'title' | 'tags' | 'coverPath' | 'description' | 'restricted' | 'folderPath' | 'memberSeriesIds' | 'mode'
+          >
         >;
       }>
     ) => {
       const series = state.series.find((s) => s.id === action.payload.id);
       if (series) Object.assign(series, action.payload.patch);
+    },
+    setSeriesComicMode: (state, action: PayloadAction<string>) => {
+      const series = state.series.find((s) => s.id === action.payload);
+      if (!series) return;
+      mergeMemberFlagsToSeries(state, series);
+      const dropIds = new Set(series.memberIds);
+      series.mode = 'comic';
+      series.memberIds = [];
+      // 母系列设为漫画时，所有子系列（含后代）一并改为漫画
+      setDescendantModes(state, series.id, 'comic');
+      for (const s of state.series) {
+        if (s.id === series.id) continue;
+        for (const id of s.memberIds) dropIds.delete(id);
+      }
+      state.media = state.media.filter((m) => !dropIds.has(m.id));
+    },
+    setSeriesImageMode: (state, action: PayloadAction<{ id: string; files: ScanResult[] }>) => {
+      const series = state.series.find((s) => s.id === action.payload.id);
+      if (!series) return;
+      const dropIds = new Set(series.memberIds);
+      series.mode = 'image';
+      // 母系列设为图片时，所有子系列（含后代）一并改为图片
+      setDescendantModes(state, series.id, 'image');
+      const newMemberIds = action.payload.files.map((f) => {
+        const existing = state.media.find(
+          (m) => m.libraryId === series.libraryId && m.filePath === f.filePath
+        );
+        if (existing) return existing.id;
+        const m: MediaItem = {
+          id: nanoid(),
+          libraryId: series.libraryId,
+          filePath: f.filePath,
+          fileName: f.fileName,
+          type: f.type,
+          size: f.size,
+          modifiedAt: f.modifiedAt,
+          tags: [],
+          description: '',
+          createdAt: Date.now(),
+          restricted: false,
+        };
+        state.media.push(m);
+        return m.id;
+      });
+      series.memberIds = newMemberIds;
+      const keepIds = new Set(newMemberIds);
+      state.media = state.media.filter((m) => !dropIds.has(m.id) || keepIds.has(m.id));
     },
     addSeriesMembers: (state, action: PayloadAction<{ id: string; memberIds: string[] }>) => {
       const series = state.series.find((s) => s.id === action.payload.id);
@@ -389,6 +513,8 @@ export const {
   removeTag,
   createSeries,
   updateSeries,
+  setSeriesComicMode,
+  setSeriesImageMode,
   addSeriesMembers,
   addSubSeries,
   removeSubSeries,

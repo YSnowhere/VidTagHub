@@ -260,9 +260,6 @@ export function TagManagerPage() {
           <Text weight="semibold" size={400}>
             标签管理
           </Text>
-          <Badge appearance="tint" size="small">
-            {tags.length} 个标签 · {categories.length} 个分类
-          </Badge>
         </div>
       </div>
 

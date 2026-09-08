@@ -15,6 +15,7 @@ const useStyles = makeStyles({
     background: tokens.colorNeutralBackground1,
     boxShadow: tokens.shadow2,
     cursor: 'pointer',
+    outline: `2px solid transparent`,
     ':hover': {
       boxShadow: tokens.shadow8,
     },

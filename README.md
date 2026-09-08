@@ -44,8 +44,11 @@
 ### 🎨 漫画阅读
 - 对纯图片系列可以进入漫画阅读状态
 - 支持多级系列，方便漫画分话管理
-- 基于开源图片查看器内核 [react-viewer](https://github.com/infeng/react-viewer)（viewerjs 的 React 封装）
+- 支持单页阅读与滚动阅读两种模式，默认使用单页阅读
+- 单页阅读基于开源图片查看器内核 [react-viewer](https://github.com/infeng/react-viewer)（viewerjs 的 React 封装），
   提供稳健的缩放、拖拽、双指捏合、旋转、翻转与多页切换
+- 滚动阅读支持上下连续滚动，缩放范围 20% ~ 500%（可缩小到 100% 以下），
+  支持按钮、Ctrl/⌘ + 滚轮、触控板捏合缩放，以及拖拽平移与双击复位
 
 ### ❓ 常见问题
 - 初次导入「库」时，如遇卡顿，请等待图片加载完毕。
@@ -65,13 +68,20 @@
 ## 📂 目录结构
 
 ```
-├─ electron/          # Electron 主进程与预加载脚本（main.ts / preload.ts）
+├─ electron/                  # Electron 主进程
+│  ├─ main.ts / preload.ts    # 入口与预加载脚本
+│  ├─ ipc/                    # IPC 通道处理（应用/库/系列/文件）
+│  └─ ...                     # 数据存储、缩略图、media:// 协议、窗口管理、系列文件夹等
 ├─ src/
-│  ├─ components/     # 界面组件（侧边栏、媒体网格、标签检索、详情面板、对话框等）
-│  ├─ store/          # Redux Toolkit（data / ui）
-│  ├─ services/       # 工具函数（格式化、播放、media:// 地址）
-│  └─ types/          # 类型定义
-├─ public/            # CRA 静态入口（含图标）
+│  ├─ components/             # 界面组件（按区域拆分）
+│  │  ├─ mainarea/            # 主区域：工具栏、媒体网格
+│  │  ├─ detail/              # 右侧详情面板
+│  │  ├─ tagmanager/          # 标签管理页面
+│  │  └─ ...                  # 漫画阅读、系列卡片、各类对话框
+│  ├─ store/                  # Redux Toolkit（data / ui，data 按模块拆分）
+│  ├─ services/               # 工具函数（格式化、播放、系列树、移动等）
+│  └─ types/                  # 类型定义
+├─ public/                    # CRA 静态入口（含图标）
 ├─ craco.config.js
 └─ package.json
 ```

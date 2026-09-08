@@ -1,0 +1,123 @@
+/** 详情面板统一样式：媒体详情与系列详情共用（面板宽度、封面、成员行、元信息等） */
+
+import { makeStyles, tokens } from '@fluentui/react-components';
+
+export const useDetailStyles = makeStyles({
+  root: {
+    width: '340px',
+    flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalS,
+    padding: tokens.spacingVerticalM,
+    background: tokens.colorNeutralBackground1,
+    borderLeft: `1px solid ${tokens.colorNeutralStroke1}`,
+    overflowY: 'auto',
+    scrollbarGutter: 'stable',
+    minHeight: 0,
+  },
+  empty: {
+    width: '340px',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeft: `1px solid ${tokens.colorNeutralStroke1}`,
+    background: tokens.colorNeutralBackground1,
+    color: tokens.colorNeutralForeground3,
+  },
+  head: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexShrink: 0,
+  },
+  cover: {
+    aspectRatio: '16 / 9',
+    flexShrink: 0,
+    borderRadius: tokens.borderRadiusMedium,
+    background: tokens.colorNeutralBackground3,
+    overflow: 'hidden',
+  },
+  img: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  nameRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+  },
+  name: {
+    flex: 1,
+    minWidth: 0,
+    overflowWrap: 'anywhere',
+  },
+  tagSummary: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: tokens.spacingHorizontalS,
+    alignItems: 'center',
+  },
+  actions: {
+    display: 'flex',
+    gap: tokens.spacingHorizontalS,
+    flexShrink: 0,
+  },
+  memberRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    padding: tokens.spacingVerticalXS,
+    borderRadius: tokens.borderRadiusSmall,
+    cursor: 'pointer',
+    ':hover': {
+      background: tokens.colorNeutralBackground3,
+    },
+  },
+  memberThumb: {
+    width: '64px',
+    height: '36px',
+    objectFit: 'cover',
+    borderRadius: tokens.borderRadiusSmall,
+    background: tokens.colorNeutralBackground3,
+    flexShrink: 0,
+  },
+  memberName: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  memberList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXS,
+    maxHeight: '260px',
+    overflowY: 'auto',
+  },
+  metaRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    marginTop: tokens.spacingVerticalL,
+    paddingTop: tokens.spacingVerticalS,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    color: tokens.colorNeutralForeground3,
+    flexShrink: 0,
+  },
+  metaText: {
+    color: tokens.colorNeutralForeground3,
+  },
+  coverCandidateThumb: {
+    width: '40px',
+    height: '22px',
+    objectFit: 'cover',
+    borderRadius: tokens.borderRadiusSmall,
+    background: tokens.colorNeutralBackground3,
+    flexShrink: 0,
+  },
+});

@@ -1,0 +1,51 @@
+{
+  "libraryId": "fap1WmPES1ty-97Zz61-z",
+  "libraryName": "漫画",
+  "media": [],
+  "series": [
+    {
+      "id": "DpTc3-X2ZBgMoyRlaoY8C",
+      "libraryId": "fap1WmPES1ty-97Zz61-z",
+      "title": "01",
+      "tags": [],
+      "description": "",
+      "createdAt": 1788797059369,
+      "restricted": false,
+      "memberIds": [],
+      "memberSeriesIds": [],
+      "folderPath": "压缩文件\\01",
+      "mode": "comic",
+      "coverPath": "压缩文件\\01\\00001.webp"
+    },
+    {
+      "id": "m07k9iHymqgzszprsfVav",
+      "libraryId": "fap1WmPES1ty-97Zz61-z",
+      "title": "02",
+      "tags": [],
+      "description": "",
+      "createdAt": 1788797059371,
+      "restricted": false,
+      "memberIds": [],
+      "memberSeriesIds": [],
+      "folderPath": "压缩文件\\02",
+      "mode": "comic",
+      "coverPath": "压缩文件\\02\\00001.webp"
+    },
+    {
+      "id": "cuRcEugloig6kNAHdO41s",
+      "libraryId": "fap1WmPES1ty-97Zz61-z",
+      "title": "压缩文件",
+      "tags": [],
+      "description": "",
+      "createdAt": 1788799824059,
+      "restricted": false,
+      "memberIds": [],
+      "memberSeriesIds": [
+        "DpTc3-X2ZBgMoyRlaoY8C",
+        "m07k9iHymqgzszprsfVav"
+      ],
+      "folderPath": "压缩文件",
+      "mode": "comic"
+    }
+  ]
+}

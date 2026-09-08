@@ -59,7 +59,10 @@ const useStyles = makeStyles({
 type ReaderMode = 'scroll' | 'page';
 
 const ZOOM_STEP = 0.25;
-const ZOOM_MIN = 1;
+/** 宽度适配 = 100% */
+const ZOOM_FIT = 1;
+/** 滚动模式允许缩小到 20%（小于 100% 也能缩放） */
+const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 5;
 
 export function ComicReader() {
@@ -71,9 +74,9 @@ export function ComicReader() {
   const hydrated = useAppSelector((s) => s.ui.hydrated);
   const styles = useStyles();
 
-  const [mode, setMode] = useState<ReaderMode>('scroll');
+  const [mode, setMode] = useState<ReaderMode>('page');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [zoom, setZoom] = useState(ZOOM_MIN);
+  const [zoom, setZoom] = useState(ZOOM_FIT);
   const [loadingPages, setLoadingPages] = useState(true);
   const scrollRef = useRef<ComicScrollReaderHandle>(null);
 
@@ -119,8 +122,8 @@ export function ComicReader() {
 
   useEffect(() => {
     setActiveIndex(0);
-    setMode('scroll');
-    setZoom(ZOOM_MIN);
+    setMode('page');
+    setZoom(ZOOM_FIT);
   }, [seriesId]);
 
   useEffect(() => {
@@ -171,7 +174,7 @@ export function ComicReader() {
 
   const handleZoomIn = () => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP));
   const handleZoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP));
-  const handleZoomFit = () => setZoom(ZOOM_MIN);
+  const handleZoomFit = () => setZoom(ZOOM_FIT);
 
   if (!seriesId || !series) {
     return (
@@ -226,7 +229,7 @@ export function ComicReader() {
                 size="small"
                 appearance="subtle"
                 onClick={handleZoomFit}
-                disabled={zoom <= ZOOM_MIN}
+                disabled={Math.abs(zoom - ZOOM_FIT) < 1e-6}
               />
             </Tooltip>
           </>
@@ -252,7 +255,18 @@ export function ComicReader() {
         </Text>
       </div>
 
-      {mode === 'scroll' ? (
+      {loadingPages || effectivePages.length === 0 ? (
+        <div
+          className={styles.background}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {loadingPages ? (
+            <Spinner label="正在加载…" />
+          ) : (
+            <Text size={400}>暂无图片</Text>
+          )}
+        </div>
+      ) : mode === 'scroll' ? (
         <ComicScrollReader
           ref={scrollRef}
           pages={effectivePages}

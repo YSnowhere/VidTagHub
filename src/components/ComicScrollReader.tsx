@@ -23,6 +23,8 @@ export interface ComicScrollReaderProps {
 
 const DEFAULT_MIN_ZOOM = 1;
 const DEFAULT_MAX_ZOOM = 5;
+/** 双击复位目标：100%（宽度适配） */
+const FIT_ZOOM = 1;
 
 const useStyles = makeStyles({
   root: {
@@ -275,7 +277,7 @@ export const ComicScrollReader = forwardRef<ComicScrollReaderHandle, ComicScroll
       const scroller = scrollerRef.current;
       if (!scroller) return;
       const rect = scroller.getBoundingClientRect();
-      requestZoom(zoomRef.current > 1.001 ? minZoom : 2, e.clientX - rect.left, e.clientY - rect.top);
+      requestZoom(zoomRef.current > FIT_ZOOM + 0.001 ? FIT_ZOOM : 2, e.clientX - rect.left, e.clientY - rect.top);
     };
 
     const columnWidth = areaWidth > 0 ? Math.max(1, Math.round(areaWidth * zoom)) : '100%';
